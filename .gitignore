@@ -11,4 +11,5 @@ data/날씨데이터/ASOS/ASOS_HOUR_2012_2025.csv
 __pycache__/
 *.py[cod]
 data/날씨데이터
+data/산불_공간DB
 jsw/data
