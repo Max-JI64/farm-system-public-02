@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import rasterio
+from rasterio.windows import Window
 from pyproj import Transformer
 from tqdm import tqdm
 import os
@@ -36,7 +37,7 @@ def calculate_topography(window, dx, dy):
     return z, slope, aspect, tpi
 
 def main():
-    base_dir = r'd:\farm-system-public-02\jsw\data\산불발생위치도_지형특성계산'
+    base_dir = r'd:\백업\farm_system_02_data\산불발생위치도_지형특성계산'
     csv_path = os.path.join(base_dir, '산불_공간DB_위경도.csv')
     dem_path = os.path.join(base_dir, '한반도90m_GRS80.img')
     twi_dir = os.path.join(base_dir, 'TWI')
@@ -54,15 +55,16 @@ def main():
     # 결과 담을 리스트
     elevations, slopes, aspects, tpis, twis = [], [], [], [], []
     
-    # 2. DEM 데이터 메모리 로딩
-    print("2. 전국 DEM 래스터 데이터 로딩 중 (시간이 조금 걸립니다)...")
-    with rasterio.open(dem_path) as src_dem:
-        dem_transform = src_dem.transform
-        dem_array = src_dem.read(1)
-        # 픽셀 크기 (m 단위)
-        dx = abs(dem_transform.a)
-        dy = abs(dem_transform.e)
-        dem_rows, dem_cols = dem_array.shape
+    # 2. DEM 데이터 열기
+    # 전국 DEM 전체를 메모리에 올리면 GDAL 메모리 오류가 날 수 있으므로,
+    # 각 좌표에서 필요한 3x3 윈도우만 읽습니다.
+    print("2. 전국 DEM 래스터 데이터 열기...")
+    src_dem = rasterio.open(dem_path)
+    dem_transform = src_dem.transform
+    # 픽셀 크기 (m 단위)
+    dx = abs(dem_transform.a)
+    dy = abs(dem_transform.e)
+    dem_rows, dem_cols = src_dem.height, src_dem.width
 
     # 3. TWI 파일 객체 목록 준비
     print("3. TWI 파일 목록 구성 중...")
@@ -86,7 +88,7 @@ def main():
             r, c = rasterio.transform.rowcol(dem_transform, x_dem, y_dem)
             # 가장자리가 아닌 경우 3x3 윈도우 추출 가능
             if 1 <= r < dem_rows-1 and 1 <= c < dem_cols-1:
-                window = dem_array[r-1:r+2, c-1:c+2]
+                window = src_dem.read(1, window=Window(c-1, r-1, 3, 3))
                 z, slope, aspect, tpi = calculate_topography(window, dx, dy)
                 
                 elevations.append(z)
@@ -137,6 +139,7 @@ def main():
     print(f"-> {output_path}")
     
     # 파일 닫기
+    src_dem.close()
     for src in twi_sources:
         src.close()
 
