@@ -580,7 +580,6 @@
 
 ### 7. 검증
 - 노트북 생성은 `json/nbformat` 기반으로 수행했고, 전체 14개 코드 셀 순차 실행 검증 결과 **PASS**했습니다.
-- 노트북 내 4개 플롯 이미지를 로컬 임시 PNG로 생성해 직접 시각 확인 후 해석을 보강했으며, 검증 후 임시 플롯 디렉터리는 삭제했습니다.
 - 최종 산출물: `EDA-2026-05-27_전체-심화-분석.ipynb`, `landcover_context_features.csv`, `build_landcover_context_features.py`.
 
 ---
