@@ -1,6 +1,4 @@
 # Python cache
 __pycache__/
 *.py[cod]
-data/날씨데이터
-data/산불_공간DB
-jsw/data
+data
