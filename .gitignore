@@ -2,3 +2,6 @@
 __pycache__/
 *.py[cod]
 data
+AGENTS.md
+.codex
+.agentmemory
