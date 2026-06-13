@@ -1,0 +1,13 @@
+﻿check_name,value,pass,details
+pipeline_stage_row_count_match,1,True,"expected=1558, actual=1558"
+clean_fire_id_duplicate_rows,0,True,정제 fire_id 중복
+clean_required_key_missing_total,0,True,"fire_id,기준시각,위도,경도,기상셀ID,기후지형유형,월_key,시간_key,샘플유형"
+clean_exact_coordinate_time_duplicate_rows,0,True,위도·경도·기준시각 완전중복
+residual_near_duplicate_pairs_100m,0,True,정제 후 동일시각 100m 이내 잔존 쌍
+invalid_weather_cell_rows,0,True,92개 기상셀ID 범위 밖
+climate_type_missing_rows,0,True,기후지형유형 기준표 미결합
+climate_type_mismatch_rows,0,True,정제 파일과 기준표 기후지형유형 불일치
+out_of_2020_2021_period_rows,0,True,Step1 고정 기간 위반
+hourly_weather_key_duplicate_rows,0,True,기상_시간단위_파생 기상셀ID×일시 중복
+unique_exposures_missing_hourly_weather,0,True,고유 기상 노출의 시간기상 결합 실패
+duplicate_cell_time_extra_event_rows_recorded,408,True,"사건 단위에는 유지, 기상 비교에서는 unique exposure 사용"

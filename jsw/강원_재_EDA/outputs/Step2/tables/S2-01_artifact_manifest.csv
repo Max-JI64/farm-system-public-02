@@ -1,0 +1,14 @@
+﻿artifact_type,filename,path,rows,columns
+table,S2-01_source_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_source_audit.csv,6.0,4.0
+table,S2-01_population_validation.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_population_validation.csv,16.0,3.0
+table,S2-01_cleaning_stage_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_cleaning_stage_audit.csv,5.0,4.0
+table,S2-01_key_quality_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_key_quality_audit.csv,12.0,4.0
+table,S2-01_missingness_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_missingness_audit.csv,23.0,5.0
+table,S2-01_sample_group_counts.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_sample_group_counts.csv,2.0,2.0
+table,S2-01_exposure_duplicate_distribution.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_exposure_duplicate_distribution.csv,15.0,4.0
+table,S2-01_unmatched_boundary_out_of_range.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_unmatched_boundary_out_of_range.csv,45.0,9.0
+table,S2-01_ys0071_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_ys0071_audit.csv,1.0,6.0
+table,S2-01_residual_near_duplicate_pairs.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_residual_near_duplicate_pairs.csv,0.0,0.0
+table,S2-01_unique_weather_exposures.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-01_unique_weather_exposures.csv,1150.0,9.0
+plot,S2-01_cleaned_fire_location_map.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-01_cleaned_fire_location_map.png,,
+plot,S2-01_unmatched_boundary_location_map.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-01_unmatched_boundary_location_map.png,,

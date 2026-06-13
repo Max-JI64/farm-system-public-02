@@ -1,0 +1,17 @@
+﻿metric,value,notes
+analysis_id,S2-01,정제 산불·분석 단위·공간조인 감사
+period,2020-01-01 <= 기준시각 < 2022-01-01,Step1 고정 범위
+weather_cells_total,92,Step1 모집단 셀 수
+raw_fire_rows,3405,원본 산불 행
+clean_fire_event_rows,1558,정제 사건 단위 행
+control_rows,0,S2-01에서는 대조군을 아직 생성하지 않음
+unique_fire_id,1558,정제 사건 고유 ID
+unique_coordinate_time,1558,고유 위도·경도·기준시각
+unique_cell_time_exposures,1150,고유 기상셀ID×기준시각
+duplicate_cell_time_extra_event_rows,408,기상 비교에서는 중복 표본으로 쓰지 않을 행 수
+required_key_missing_total,0,정제 사건 필수 키 결측 총합
+clean_fire_id_duplicate_rows,0,fire_id 중복 행
+raw_spatial_unmatched_rows,4,원본 중 기상셀 polygon within 실패
+boundary_points_le_100m,41,정제 사건 중 matched cell 경계 100m 이내
+YS_0071_event_rows,14,Step1 품질검토대상 셀 사건 수
+YS_0071_unique_exposures,12,Step1 품질검토대상 셀 고유 노출 수
