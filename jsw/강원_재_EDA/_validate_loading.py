@@ -4,12 +4,22 @@ import argparse
 import ast
 import gc
 import json
+import re
 from pathlib import Path
 
 import re_eda_common as common
 
 
 HERE = Path(__file__).resolve().parent
+
+EXPECTED_LOG_COUNTS = {
+    "Step1_강원도_기후지형및캐나다지수_기본분석": 10,
+    "Step2_강원도_산불발생_날씨지수_대조군재분석": 10,
+    "Step3_산불발생_선행기상및국지임계치_심화분석": 13,
+    "Step4_산불발생_공간지형및대조군_분석": 13,
+    "Step5_산불발생_기후공간지수_융합분석": 12,
+    "Step6_산불발생_인간활동원인프록시_분석": 10,
+}
 
 
 def validate_notebooks() -> None:
@@ -27,7 +37,49 @@ def validate_notebooks() -> None:
                     "".join(cell["source"]),
                     filename=f"{path.name}:cell{index}",
                 )
+        markdown = "\n".join(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "markdown"
+        )
+        if "결과 해석은 이 노트북에 작성하지 않는다." not in markdown:
+            raise AssertionError(f"{path.name}: 외부 로그 해석 원칙이 없습니다.")
+        if re.search(r"^#{1,6}\s+.*결과\s*해석", markdown, flags=re.MULTILINE):
+            raise AssertionError(f"{path.name}: 결과 해석 Markdown 제목이 있습니다.")
         print(f"notebook ok: {path.name} ({len(notebook['cells'])} cells)")
+
+
+def validate_progress_logs() -> None:
+    for stem, expected_count in EXPECTED_LOG_COUNTS.items():
+        notebook_path = HERE / f"{stem}.ipynb"
+        log_path = HERE / f"{stem}_진행예정로그.md"
+        if not notebook_path.exists():
+            raise FileNotFoundError(notebook_path)
+        if not log_path.exists():
+            raise FileNotFoundError(log_path)
+
+        content = log_path.read_text(encoding="utf-8")
+        analysis_rows = re.findall(r"\| S[1-6]-\d{2} \|", content)
+        if len(analysis_rows) != expected_count:
+            raise AssertionError(
+                f"{log_path.name}: 분석 ID {len(analysis_rows)}개, 예상 {expected_count}개"
+            )
+        required_phrases = [
+            "결과표",
+            "플롯",
+            "통합 해석",
+            "다음 분석 코드",
+            "노트북 Markdown에는 결과 해석을 작성하지 않는다.",
+            "시각화 중심",
+            "결과 기반 추가 심화 분석 큐",
+            "추가 심화 분석 필요 여부와 근거",
+            "등록한 모든",
+            "Axx 심화 분석",
+        ]
+        missing = [phrase for phrase in required_phrases if phrase not in content]
+        if missing:
+            raise AssertionError(f"{log_path.name}: 필수 문구 누락 {missing}")
+        print(f"progress log ok: {log_path.name} ({expected_count} analysis IDs)")
 
 
 def validate_core(*, full_hourly: bool) -> None:
@@ -97,6 +149,7 @@ def main() -> None:
     args = parser.parse_args()
 
     validate_notebooks()
+    validate_progress_logs()
     validate_core(full_hourly=args.full_hourly)
     if args.heavy_spatial:
         validate_heavy_spatial()

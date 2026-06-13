@@ -41,6 +41,9 @@ def base_cells(step: int, title: str, purpose: str, source_keys: list[str]) -> l
 
             공통 데이터 계약은 `README.md`를 따른다. Step 2~6에서 캐나다 지수를 사건 시각에
             결합할 때는 12시 이전이면 전일 정오, 12시 이후이면 당일 정오 자료만 사용한다.
+
+            결과 해석은 이 노트북에 작성하지 않는다. 결과표와 플롯을 함께 검토한 해석,
+            한계와 다음 코드 반영사항은 대응 `진행예정로그.md`에만 기록한다.
             """
         ),
         code_cell(
@@ -111,6 +114,7 @@ def final_cells(loaded_names: list[str], next_work: str) -> list[dict]:
 
             현재 노트북은 로딩과 입력 감사까지만 실행한다. 이후 분석 셀에서도
             `README.md`의 미래 정보 누수 방지 규칙과 대조군 정의를 유지해야 한다.
+            실행 결과의 해석은 대응 `진행예정로그.md`에 작성한다.
             """
         ),
     ]
