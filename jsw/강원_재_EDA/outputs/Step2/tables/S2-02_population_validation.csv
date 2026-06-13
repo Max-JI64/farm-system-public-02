@@ -1,0 +1,16 @@
+﻿metric,value,notes
+analysis_id,S2-02,월별·시간대별·권역별 발생 분포
+period,2020-01-01 <= 기준시각 < 2022-01-01,Step1 고정 범위
+clean_fire_rows_before_period_filter,1558,분석 전 정제 사건 행 수
+clean_fire_rows_after_period_filter,1558,분석 후 정제 사건 행 수
+unique_fire_id,1558,정제 사건 고유 ID
+unique_cell_time_exposures,1150,고유 기상셀ID×기준시각 노출
+control_rows,0,S2-02에서는 대조군을 생성하지 않음
+required_key_missing_total,0,필수 키 결측 총합
+fire_id_duplicate_rows,0,기대값 0
+coordinate_time_duplicate_rows,0,기대값 0
+duplicate_cell_time_extra_event_rows,408,동일 기상 노출 공유 사건 수
+weather_population_rows,1614048,92개 셀의 2020~2021 cell-hour
+weather_population_cells,92,Step1 고정 92개 셀
+weather_population_duplicate_cell_time,0,기대값 0
+fire_exposures_missing_weather_key,0,기대값 0
