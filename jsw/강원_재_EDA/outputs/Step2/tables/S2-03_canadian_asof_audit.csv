@@ -1,0 +1,4 @@
+﻿sample_group,row_n,future_violation_n,ffmc_missing_key_n,fwi_missing_key_n,min_lag_hours,max_lag_hours,same_day_index_n,previous_day_index_n
+fire_exposures,1150,0,0,0,0.0,23.0,690.0,460.0
+nonfire_candidates,1536040,0,1091,1091,0.0,23.0,767881.0,768159.0
+canadian_index_files,67252,0,0,0,,,,

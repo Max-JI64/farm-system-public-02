@@ -1,0 +1,17 @@
+﻿metric,value,notes
+analysis_id,S2-03,전체 비발생 후보 생성과 누수 감사
+period,2020-01-01 <= 기준시각 < 2022-01-01,Step1 고정 범위
+weather_population_rows_before_exclusion,1614048,분석 전 전체 시간기상 cell-hour
+clean_fire_event_rows,1558,정제 사건 수
+unique_fire_exposure_rows,1150,고유 산불 노출 수
+same_cell_time_fire_rows_removed,1150,산불 동일 노출 제외 행
+same_cell_plus_minus_48h_total_removed,78008,동일 노출 포함 전후 48시간 제외 총행
+same_cell_plus_minus_48h_additional_removed,76858,동일 노출 제외 후 추가 제외 행
+nonfire_candidate_rows_after_exclusion,1536040,S2-03 최종 전체 비발생 후보
+nonfire_candidate_rows_with_canadian_index,1534949,캐나다 FFMC/FWI as-of 키가 모두 있는 후보
+required_key_missing_total,0,후보 필수 키 결측 총합
+candidate_duplicate_cell_time_rows,0,기대값 0
+direct_fire_overlap_in_candidates,0,기대값 0
+same_cell_48h_contamination_in_candidates,0,기대값 0
+canadian_asof_future_violation_total,0,기대값 0
+rolling_recalculation_mismatch_total,0,기대값 0

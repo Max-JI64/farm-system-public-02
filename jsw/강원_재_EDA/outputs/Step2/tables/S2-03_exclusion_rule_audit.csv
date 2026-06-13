@@ -1,0 +1,5 @@
+﻿step,rows_remaining,removed_in_step,cumulative_removed,rule
+initial_weather_cell_hours,1614048,0,0,92개 기상셀 2020~2021년 전체 시간기상
+remove_same_cell_time_fire_exposures,1612898,1150,1150,산불 고유 노출과 동일한 기상셀ID×기준시각 제외
+remove_same_cell_plus_minus_48h_additional,1536040,76858,78008,동일 기상셀에서 산불 기준시각 전후 48시간 추가 제외
+final_nonfire_candidates,1536040,0,78008,S2-03 전체 비발생 후보

@@ -1,0 +1,6 @@
+﻿check_name,value,expected
+candidate duplicate cell-time rows,0,0
+candidate direct fire exposure overlap,0,0
+candidate same-cell ±48h contamination rows,0,0
+event windows with post-exclusion candidates,0,0
+direct fire rows not covered by ±48h window,0,0
