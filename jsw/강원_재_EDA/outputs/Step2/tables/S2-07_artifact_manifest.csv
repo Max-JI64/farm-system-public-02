@@ -1,0 +1,16 @@
+﻿artifact_type,filename,path,rows,columns
+table,S2-07_analysis_scope.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_analysis_scope.csv,9.0,2.0
+table,S2-07_population_validation.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_population_validation.csv,8.0,3.0
+table,S2-07_missingness_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_missingness_audit.csv,22.0,4.0
+table,S2-07_duplicate_key_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_duplicate_key_audit.csv,2.0,3.0
+table,S2-07_sample_group_counts.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_sample_group_counts.csv,2.0,3.0
+table,S2-07_weather_delta_summary.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_weather_delta_summary.csv,22.0,21.0
+table,S2-07_weather_delta_raw.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-07_weather_delta_raw.csv,1150.0,30.0
+plot,S2-07_delta_dist_직전24h_최소습도.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_직전24h_최소습도.png,,
+plot,S2-07_delta_dist_직전24h_평균습도.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_직전24h_평균습도.png,,
+plot,S2-07_delta_dist_직전24h_평균풍속.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_직전24h_평균풍속.png,,
+plot,S2-07_delta_dist_직전24h_최대풍속.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_직전24h_최대풍속.png,,
+plot,S2-07_delta_dist_직전24h_강수량합.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_직전24h_강수량합.png,,
+plot,S2-07_delta_dist_D-1_최소습도_pct.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_D-1_최소습도_pct.png,,
+plot,S2-07_delta_dist_D-1_강수량합_mm.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_delta_dist_D-1_강수량합_mm.png,,
+plot,S2-07_effect_size_forest_plot.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-07_effect_size_forest_plot.png,,

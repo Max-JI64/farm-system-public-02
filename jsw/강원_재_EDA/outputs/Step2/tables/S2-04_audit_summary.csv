@@ -15,5 +15,5 @@ control_duplicate_within_event_n,0,True
 unique_control_n,5255,True
 reused_control_n,278,True
 max_control_reuse_n,7,True
-matched_controls_sha256,2b146b8d155bfdae843311839a298c5bcff1b7a734bfa1b7b261387411c312c3,True
+matched_controls_sha256,030e7e195fad44aa259ae067b0e9c48311bd7e4bf958f45bcb8ded5b1cfb4c86,True
 random_seed,42,True
