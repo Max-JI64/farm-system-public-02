@@ -1,0 +1,7 @@
+﻿artifact_type,path
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-06_temperature_pressure_anomaly_summary.csv
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-06_anomaly_by_type_month.csv
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-06_pressure_change_joint_summary.csv
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-06_plot_manifest.csv
+plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-06_anomaly_heatmap.png
+plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-06_pressure_change_distribution.png
