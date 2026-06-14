@@ -1,0 +1,16 @@
+﻿artifact_type,filename,path,rows,columns
+table,S2-06_analysis_scope.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_analysis_scope.csv,9.0,2.0
+table,S2-06_population_validation.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_population_validation.csv,9.0,3.0
+table,S2-06_missingness_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_missingness_audit.csv,9.0,4.0
+table,S2-06_duplicate_key_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_duplicate_key_audit.csv,3.0,3.0
+table,S2-06_sample_group_counts.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_sample_group_counts.csv,2.0,3.0
+table,S2-06_climate_season_crosstab.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_climate_season_crosstab.csv,6.0,6.0
+table,S2-06_canadian_comparison.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_canadian_comparison.csv,6.0,21.0
+table,S2-06_reference_comparison.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-06_reference_comparison.csv,3.0,21.0
+plot,S2-06_ecdf_FFMC.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_ecdf_FFMC.png,,
+plot,S2-06_ecdf_DMC.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_ecdf_DMC.png,,
+plot,S2-06_ecdf_DC.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_ecdf_DC.png,,
+plot,S2-06_ecdf_ISI.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_ecdf_ISI.png,,
+plot,S2-06_ecdf_BUI.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_ecdf_BUI.png,,
+plot,S2-06_ecdf_FWI.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_ecdf_FWI.png,,
+plot,S2-06_effect_size_forest_plot.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-06_effect_size_forest_plot.png,,
