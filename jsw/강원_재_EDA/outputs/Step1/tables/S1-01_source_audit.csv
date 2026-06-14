@@ -1,8 +1,0 @@
-﻿데이터키,존재,크기_MB,경로
-weather_cells,True,0.05,D:\farm-system-public-02\data\강원도_날씨데이터\강원도날씨_격자.csv
-weather_grid,True,0.09,D:\farm-system-public-02\data\강원도_날씨데이터\강원도날씨_격자.geojson
-weather_hourly_raw,True,106.98,D:\farm-system-public-02\data\강원도_날씨데이터\강원도날씨_격자_시간단위.csv
-climate_type,True,0.0,D:\farm-system-public-02\data\강원도_날씨데이터\강원도날씨_기후지형유형_셀분류.csv
-canada_ffmc,True,6.75,D:\farm-system-public-02\data\학습데이터\캐나다_FFMC_선행연구_일단위.csv
-canada_fwi,True,10.1,D:\farm-system-public-02\data\학습데이터\캐나다_FWI_일단위.csv
-dem,True,9.47,D:\farm-system-public-02\data\강원도_데이터\강원도_공간데이터\강원도_DEM_데이터.tif
