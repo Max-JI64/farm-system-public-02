@@ -1,0 +1,17 @@
+﻿feature,sample_group,n,comparable_n,match_n,mismatch_n,max_abs_diff,median_abs_diff,min_prior_obs_n,status
+직전24h_최대풍속,fire,1150,1150,1150,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전24h_최대풍속,matched_control,5632,5632,5632,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전24h_최소습도,fire,1150,1150,1150,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전24h_최소습도,matched_control,5632,5632,5632,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전24h_평균습도,fire,1150,1150,1150,0,2.842170943040401e-14,0.0,12,ok_prior_only_matches_existing
+직전24h_평균습도,matched_control,5632,5632,5632,0,4.263256414560601e-14,0.0,12,ok_prior_only_matches_existing
+직전24h_평균풍속,fire,1150,1150,1150,0,1.7763568394002505e-15,0.0,12,ok_prior_only_matches_existing
+직전24h_평균풍속,matched_control,5632,5632,5632,0,1.7763568394002505e-15,0.0,12,ok_prior_only_matches_existing
+직전48h_최대풍속,fire,1150,1150,1150,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전48h_최대풍속,matched_control,5632,5632,5632,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전48h_최소습도,fire,1150,1150,1150,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전48h_최소습도,matched_control,5632,5632,5632,0,0.0,0.0,12,ok_prior_only_matches_existing
+직전48h_평균습도,fire,1150,1150,1150,0,2.842170943040401e-14,0.0,12,ok_prior_only_matches_existing
+직전48h_평균습도,matched_control,5632,5632,5632,0,4.263256414560601e-14,0.0,12,ok_prior_only_matches_existing
+직전48h_평균풍속,fire,1150,1150,1150,0,1.7763568394002505e-15,0.0,12,ok_prior_only_matches_existing
+직전48h_평균풍속,matched_control,5632,5632,5632,0,3.552713678800501e-15,0.0,12,ok_prior_only_matches_existing
