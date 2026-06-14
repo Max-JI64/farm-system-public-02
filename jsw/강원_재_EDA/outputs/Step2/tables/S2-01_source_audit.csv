@@ -1,7 +1,0 @@
-﻿source,exists,size_mb,path
-raw_fire,True,0.389,D:\farm-system-public-02\data\강원도_데이터\강원도_산불발생.csv
-clean_fire,True,0.323,D:\farm-system-public-02\data\학습데이터\산불발생_정제.csv
-near_duplicate_audit,True,0.242,D:\farm-system-public-02\data\학습데이터\산불발생_준중복제외.csv
-weather_grid,True,0.093,D:\farm-system-public-02\data\강원도_날씨데이터\강원도날씨_격자.geojson
-climate_type,True,0.003,D:\farm-system-public-02\data\강원도_날씨데이터\강원도날씨_기후지형유형_셀분류.csv
-hourly_weather_derived,True,438.45,D:\farm-system-public-02\data\학습데이터\기상_시간단위_파생.csv

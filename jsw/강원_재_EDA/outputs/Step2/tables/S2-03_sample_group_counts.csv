@@ -1,6 +1,0 @@
-﻿sample_group,row_n,unique_cell_time_n,cell_n,fire_event_n,fire_exposure_n,control_candidate_n
-weather_population_before_exclusion,1614048,1614048,92,0,0,0
-clean_fire_events,1558,1150,87,1558,1150,0
-excluded_same_cell_time_fire_exposures,1150,1150,87,0,1150,0
-excluded_same_cell_plus_minus_48h_total,78008,78008,87,0,0,0
-final_nonfire_candidates,1536040,1536040,92,0,0,1536040

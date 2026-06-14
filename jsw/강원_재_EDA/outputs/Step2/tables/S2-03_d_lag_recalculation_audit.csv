@@ -1,6 +1,0 @@
-﻿feature,source_column,lag_days,actual_missing_n,expected_missing_n,recomputed_mismatch_n,max_abs_diff
-D-1_최소습도_pct,최소습도_pct,1,2208,2208,0,0.0
-D-1_평균습도_pct,평균습도_pct,1,2208,2208,0,1.4210854715202004e-14
-D-1_강수량합_mm,강수량합_mm,1,2208,2208,0,5.684341886080802e-14
-D-2_최소습도_pct,최소습도_pct,2,4416,4416,0,0.0
-D-3_최소습도_pct,최소습도_pct,3,6624,6624,0,0.0

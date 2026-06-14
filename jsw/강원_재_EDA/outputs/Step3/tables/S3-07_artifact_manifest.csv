@@ -1,7 +1,0 @@
-﻿artifact_type,path
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-07_absolute_humidity_features.csv
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-07_local_percentile_thresholds.csv
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-07_threshold_performance_summary.csv
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-07_plot_manifest.csv
-plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-07_absolute_vs_relative_ecdf.png
-plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-07_threshold_curve_by_type.png

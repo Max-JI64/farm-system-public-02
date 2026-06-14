@@ -1,7 +1,0 @@
-﻿item,value
-analysis_question,절대적 건조값 기준보다 셀x월xhour 국지 상대 백분위(분위수) 기준이 지형/계절적 기온 편차를 제어하여 더 안정적으로 산불 위험을 포착하는가?
-analysis_unit,fire_exposure_id별 대응 delta 및 이진 조건 충족률 격차
-population,"Step 2 고유 산불 노출 1,150개"
-comparison_group,"Step 2 고정 매칭 대조군 5,632행"
-period,2020~2021년 강원도 기상셀 시간 기상자료
-control_stratification_matching,"동일 기상셀, 동일 연도, 동일 월, 동일 hour 매칭"

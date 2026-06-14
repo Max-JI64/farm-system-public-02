@@ -1,7 +1,0 @@
-﻿check_name,duplicate_n,expected
-fire_id duplicate rows,0,0
-coordinate-time duplicate rows,0,0
-cell-time extra event rows,408,"recorded, not fatal"
-exposure climate type conflicts,0,0
-weather population duplicate cell-time rows,0,0
-fire exposures missing weather key,0,0

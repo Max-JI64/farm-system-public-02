@@ -1,7 +1,0 @@
-﻿artifact_type,path
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-04_rain_elapsed_summary.csv
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-04_dry_spell_threshold_summary.csv
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-04_post_rain_drying_proxy.csv
-table,jsw/강원_재_EDA/outputs/Step3/tables/S3-04_plot_manifest.csv
-plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-04_rain_elapsed_ecdf.png
-plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-04_post_rain_drying_by_type.png

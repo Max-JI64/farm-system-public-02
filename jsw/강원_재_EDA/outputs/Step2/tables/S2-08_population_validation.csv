@@ -1,9 +1,0 @@
-﻿metric,value,notes
-analysis_id,S2-08,산불 대 매칭 비발생 캐나다 지수 주 분석
-period,2020-01-01 <= 기준시각 < 2022-01-01,Step1 고정 범위
-fire_exposure_rows,1150,고유 산불 노출 수
-control_rows,5632,매칭 대조군 행 수
-fire_merged_rows,1150,캐나다 지수 결합 성공한 산불 노출 수
-control_merged_rows,5632,캐나다 지수 결합 성공한 대조군 수
-missing_keys_total,0,결합 키 결측 수
-duplicate_cell_time_rows,0,산불 노출 중복 키 존재 수

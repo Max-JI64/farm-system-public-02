@@ -1,8 +1,0 @@
-﻿artifact_type,path,rows
-table,jsw\강원_재_EDA\outputs\Step3\tables\S3-01_input_population_audit.csv,30.0
-table,jsw\강원_재_EDA\outputs\Step3\tables\S3-01_lead_feature_availability.csv,120.0
-table,jsw\강원_재_EDA\outputs\Step3\tables\S3-01_leakage_recalculation_audit.csv,16.0
-table,jsw\강원_재_EDA\outputs\Step3\tables\S3-01_leakage_recalculation_detail.csv,54256.0
-table,jsw\강원_재_EDA\outputs\Step3\tables\S3-01_flagged_exposures.csv,6782.0
-plot,jsw\강원_재_EDA\outputs\Step3\plots\S3-01_feature_availability_heatmap.png,
-plot,jsw\강원_재_EDA\outputs\Step3\plots\S3-01_missing_prior_hour_coverage_by_cell.png,

@@ -1,2 +1,0 @@
-﻿source_file,timestamp_column,min_timestamp,max_timestamp,unique_cell_n,row_n,min_step_hours,max_step_hours,explicit_start_end_metadata_found,decision
-data\강원도_날씨데이터\강원도날씨_격자_시간단위.csv,일시,2020-01-01,2021-12-31 23:00:00,92,1614048,1.0,1.0,False,시간 간격은 1시간으로 완전하지만 시작·종료·대표시각 여부 메타데이터는 확인되지 않아 시점_* 변수는 동시상태 기술값으로 유지

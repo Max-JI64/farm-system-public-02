@@ -1,9 +1,0 @@
-﻿metric,value,notes
-analysis_id,S2-05,산불 대 전체 비발생 기상 탐색 비교
-period,2020-01-01 <= 기준시각 < 2022-01-01,Step1 고정 범위
-fire_exposure_rows,1150,고유 산불 노출 수
-nonfire_candidate_rows,1536040,전체 비발생 후보 수
-fire_merged_rows,1150,기상 결합 성공한 산불 노출 수
-nonfire_merged_rows,1536040,기상 결합 성공한 비발생 후보 수
-missing_keys_total,0,결합 키 결측 수
-duplicate_cell_time_rows,0,중복 키 존재 수

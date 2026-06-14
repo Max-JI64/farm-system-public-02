@@ -1,5 +1,0 @@
-﻿check_name,pass,evidence
-rolling_current_row_excluded,True,기상셀ID별 기온·풍속·습도·강수량 shift(1) 후 rolling 계산
-rolling_min_periods_1,True,직전 24/48시간 rolling에 min_periods=1 사용
-d_lag_previous_dates,True,일별 집계 후 lag일만큼 날짜를 앞으로 밀어 D-1~D-3를 기준일 이전 날짜로 병합
-pressure_change_uses_past_3h,True,기압변동_3h는 같은 셀의 3시간 전 현지기압과 현재 현지기압 차이
