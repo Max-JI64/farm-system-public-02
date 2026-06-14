@@ -1,0 +1,15 @@
+﻿artifact_type,filename,path,rows,columns
+table,S2-08_analysis_scope.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_analysis_scope.csv,9.0,2.0
+table,S2-08_population_validation.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_population_validation.csv,8.0,3.0
+table,S2-08_missingness_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_missingness_audit.csv,9.0,4.0
+table,S2-08_duplicate_key_audit.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_duplicate_key_audit.csv,2.0,3.0
+table,S2-08_sample_group_counts.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_sample_group_counts.csv,2.0,3.0
+table,S2-08_canadian_delta_summary.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_canadian_delta_summary.csv,9.0,21.0
+table,S2-08_canadian_delta_raw.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-08_canadian_delta_raw.csv,1150.0,17.0
+plot,S2-08_delta_dist_FFMC.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_delta_dist_FFMC.png,,
+plot,S2-08_delta_dist_DMC.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_delta_dist_DMC.png,,
+plot,S2-08_delta_dist_DC.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_delta_dist_DC.png,,
+plot,S2-08_delta_dist_ISI.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_delta_dist_ISI.png,,
+plot,S2-08_delta_dist_BUI.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_delta_dist_BUI.png,,
+plot,S2-08_delta_dist_FWI.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_delta_dist_FWI.png,,
+plot,S2-08_effect_size_forest_plot.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-08_effect_size_forest_plot.png,,
