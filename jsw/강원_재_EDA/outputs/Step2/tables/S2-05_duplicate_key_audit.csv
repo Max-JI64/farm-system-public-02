@@ -1,0 +1,4 @@
+﻿check_name,duplicate_n,pass
+fire_key_duplicates,0,True
+nonfire_key_duplicates,0,True
+fire_nonfire_overlap_key_n,0,True
