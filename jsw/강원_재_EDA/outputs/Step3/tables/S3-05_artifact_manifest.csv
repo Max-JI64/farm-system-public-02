@@ -1,0 +1,7 @@
+﻿artifact_type,path
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-05_wind_duration_summary.csv
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-05_wind_direction_condition_summary.csv
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-05_circular_direction_tests.csv
+table,jsw/강원_재_EDA/outputs/Step3/tables/S3-05_plot_manifest.csv
+plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-05_wind_rose_by_type.png
+plot,jsw/강원_재_EDA/outputs/Step3/plots/S3-05_wind_threshold_forest.png
