@@ -1,11 +1,13 @@
-import os
+from __future__ import annotations
+
 import sys
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-import seaborn as sns
 from pathlib import Path
+
+import matplotlib.font_manager as fm
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -21,7 +23,6 @@ PLOT_DIR = OUT_DIR / "plots"
 TABLE_DIR.mkdir(parents=True, exist_ok=True)
 PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Font settings
 font_path = "C:/Windows/Fonts/malgun.ttf"
 fm.fontManager.addfont(font_path)
 font_name = fm.FontProperties(fname=font_path).get_name()
@@ -40,189 +41,307 @@ plt.rcParams["font.sans-serif"] = [font_name]
 plt.rcParams["axes.unicode_minus"] = False
 
 
-def main() -> None:
-    print("--- S4-06: 최종 EDA 공간 요약 시작 ---")
-    
-    # 1. Generate S4-06_final_spatial_eda_summary.csv
-    summary_data = [
-        {
-            "요약 메시지": "도로 초근접성 편향: WUI 내 산불은 도로 10m 이내에 70% 집중됨",
-            "근거 표": "S4-05_effect_size_by_variable.csv (Cliff's delta -0.725, p=0.000)",
-            "근거 플롯": "S4-05_key_variable_ecdf.png",
-            "해석 가능 범위": "동일한 기상 및 공간층 통제 하에서도 발생지가 대조군보다 도로에 극도로 근접하여 발화함",
-            "해석 금지 문장": "도로변 담뱃재 투기가 산불의 직접적 주원인이라고 인과 단정하는 것"
-        },
-        {
-            "요약 메시지": "인프라 접경지 발원 패턴: WUI 내 산불은 과반이 시가화 및 초지 경계선에 집중되며 실제 산림지역 피복 위 발원은 14.2%에 불과함",
-            "근거 표": "S4-05_landcover_crosstab.csv (시가화지역 39.3%, 초지 19.3%, 산림지역 14.2%)",
-            "근거 플롯": "N/A",
-            "해석 가능 범위": "산불 발원은 숲 내부가 아닌 인프라 접경지 나대지, 마당, 도로변 수풀에서 유래함",
-            "해석 금지 문장": "산림 면적이 좁아서 산불이 잘 난다거나, 건물 자체가 산불을 유도한다고 해석하는 것"
-        },
-        {
-            "요약 메시지": "지형의 비선형성 및 층화: 발생지는 전반적으로 고도가 낮고 경사가 완만한 골짜기에 치우치나, 산림 내부 깊은 곳에서는 TPI가 양수로 반전되어 능선부 취약성이 증가함",
-            "근거 표": "S4-05_effect_size_by_variable.csv (산림 내부 TPI Cliff's delta +0.181, WUI TPI -0.106)",
-            "근거 플롯": "S4-05_effect_size_forest.png",
-            "해석 가능 범위": "공간층에 따라 고도/경사의 효과 크기가 달라지며 지형적 영향이 비선형적으로 반전됨",
-            "해석 금지 문장": "특정 고도나 TPI 수치가 산불을 유발하는 직접적 원인이라고 단정하는 것"
-        },
-        {
-            "요약 메시지": "산림 접근권 내 등산로 영향: 임도/등산로 500m 이내 영역에서는 등산로 최단거리가 유의미한 취약 인자(Cliff's delta -0.22)로 작용함",
-            "근거 표": "S4-05_effect_size_by_variable.csv (산림 접근권 등산로 Cliff's delta -0.219, p=0.000)",
-            "근거 플롯": "S4-05_effect_size_forest.png",
-            "해석 가능 범위": "인접 인프라가 한정된 산림 접근권 영역 내부에서는 등산로 인접성이 공간적 취약 지표로 유의함",
-            "해석 금지 문장": "등산객이 100% 고의로 산불을 냈다고 단정하는 것"
-        }
+def stat_row(stats: pd.DataFrame, layer: str, variable: str) -> pd.Series:
+    row = stats[stats["spatial_layer"].eq(layer) & stats["variable"].eq(variable)]
+    if row.empty:
+        raise KeyError(f"Missing S4-05 stat row: {layer} / {variable}")
+    return row.iloc[0]
+
+
+def pct_value(lc: pd.DataFrame, layer: str, frame: str, name: str, column: str) -> float:
+    row = lc[
+        lc["spatial_layer"].eq(layer)
+        & lc["comparison_frame"].eq(frame)
+        & lc["L1_NAME"].eq(name)
     ]
-    df_summary = pd.DataFrame(summary_data)
-    df_summary.to_csv(TABLE_DIR / "S4-06_final_spatial_eda_summary.csv", index=False, encoding="utf-8-sig")
-    print("S4-06_final_spatial_eda_summary.csv 생성 완료")
-    
-    # 2. Generate S4-06_spatial_variable_handoff.csv
-    handoff_data = [
+    if row.empty:
+        return 0.0
+    return float(row[column].iloc[0])
+
+
+def format_p(value: float) -> str:
+    if pd.isna(value):
+        return "NA"
+    if value < 1e-6:
+        return "<1e-6"
+    return f"{value:.3g}"
+
+
+def build_handoff(stats: pd.DataFrame) -> pd.DataFrame:
+    wui = "생활권-WUI"
+    access = "산림 접근권"
+    interior = "산림 내부"
+
+    road = stat_row(stats, wui, "도로_최단거리_m")
+    urban = stat_row(stats, wui, "시가화_최단거리_m")
+    forest = stat_row(stats, wui, "산림_최단거리_m")
+    slope = stat_row(stats, wui, "경사도(도)")
+    elevation = stat_row(stats, wui, "고도(m)")
+    agriculture = stat_row(stats, wui, "농업_최단거리_m")
+    tpi = stat_row(stats, wui, "TPI(지형위치지수)")
+    forest_road = stat_row(stats, wui, "임도_최단거리_m")
+    trail = stat_row(stats, wui, "등산로_최단거리_m")
+    trail_access = stat_row(stats, access, "등산로_최단거리_m")
+    tpi_interior = stat_row(stats, interior, "TPI(지형위치지수)")
+
+    rows = [
         {
             "변수명": "도로_최단거리_m",
             "등급": "EDA 핵심",
-            "Cliff's delta (WUI)": -0.725,
+            "Cliff's delta (WUI)": road["cliffs_delta"],
             "권장 피처 처리 방식": "도로 10m 이내 여부 더미 변수(is_road_ultra_close) 및 선형 거리 변수 병용",
-            "선정/제외 사유": "WUI 내부에서도 가장 강력하고 압도적인 공간 편향을 보임"
+            "선정/제외 사유": (
+                f"WUI 내부에서 가장 큰 접근성 효과(delta={road['cliffs_delta']:.3f}, "
+                f"q={format_p(road['welch_q_value_fdr'])})"
+            ),
         },
         {
             "변수명": "시가화_최단거리_m",
             "등급": "후속 모델링 후보",
-            "Cliff's delta (WUI)": -0.663,
+            "Cliff's delta (WUI)": urban["cliffs_delta"],
             "권장 피처 처리 방식": "시가화 10m 이내 여부(is_urban_edge) 및 선형 거리",
-            "선정/제외 사유": "매우 강한 비선형적 쏠림이 있으나, 도로와 상관관계가 높으므로 다중공선성 확인 필요"
+            "선정/제외 사유": (
+                f"순위 기반 근접 편향은 크지만 평균은 롱테일 영향을 받음(delta={urban['cliffs_delta']:.3f})"
+            ),
         },
         {
             "변수명": "산림_최단거리_m",
             "등급": "후속 모델링 후보",
-            "Cliff's delta (WUI)": 0.466,
-            "권장 피처 처리 방식": "산림 내부(0m) vs 산림 외부 경계 거리 분리",
-            "선정/제외 사유": "발생지가 산림 경계면 외부 190m 부근 WUI 구역에 치우쳐 있어 경계부 정의에 필수적"
+            "Cliff's delta (WUI)": forest["cliffs_delta"],
+            "권장 피처 처리 방식": "산림 내부(0m)와 산림 외부 경계 거리 분리",
+            "선정/제외 사유": (
+                f"WUI 안에서 발생지가 산림 피복 내부보다 경계 바깥 쪽으로 치우침(delta={forest['cliffs_delta']:.3f})"
+            ),
         },
         {
             "변수명": "경사도(도)",
             "등급": "후속 모델링 후보",
-            "Cliff's delta (WUI)": -0.318,
-            "권장 피처 처리 방식": "선형 경사도 변수",
-            "선정/제외 사유": "발생지가 완만한 사면에 쏠리는 경향이 전 공간층에서 통계적으로 유의함"
+            "Cliff's delta (WUI)": slope["cliffs_delta"],
+            "권장 피처 처리 방식": "선형 경사도 변수와 공간층 상호작용 후보",
+            "선정/제외 사유": f"WUI 발생지가 완만한 사면 쪽으로 이동(delta={slope['cliffs_delta']:.3f})",
         },
         {
             "변수명": "고도(m)",
             "등급": "후속 모델링 후보",
-            "Cliff's delta (WUI)": -0.179,
+            "Cliff's delta (WUI)": elevation["cliffs_delta"],
             "권장 피처 처리 방식": "기후지형유형 권역 층화 결합 피처",
-            "선정/제외 사유": "권역별(영동/영서/산간) 고도 분포가 뚜렷이 분리되며, 발생지가 상대적으로 저지대에 편향됨"
+            "선정/제외 사유": f"발생지가 상대적으로 저지대에 분포(delta={elevation['cliffs_delta']:.3f})",
         },
         {
             "변수명": "농업_최단거리_m",
             "등급": "보고서 보조",
-            "Cliff's delta (WUI)": -0.168,
-            "권장 피처 처리 방식": "선형 거리 변수",
-            "선정/제외 사유": "WUI 내부에서 비교 시 다른 변수들에 비해 상대적으로 편향의 강도가 약함"
+            "Cliff's delta (WUI)": agriculture["cliffs_delta"],
+            "권장 피처 처리 방식": "선형 거리 변수 또는 WUI 보조 설명 변수",
+            "선정/제외 사유": f"WUI 내부 효과가 도로·시가화보다 작음(delta={agriculture['cliffs_delta']:.3f})",
         },
         {
             "변수명": "TPI(지형위치지수)",
             "등급": "후속 모델링 후보",
-            "Cliff's delta (WUI)": -0.106,
-            "권장 피처 처리 방식": "산림 내부 vs WUI 층별 부호 반전 인터랙션 피처",
-            "선정/제외 사유": "산림 내부에서는 능선부(+), WUI에서는 계곡부(-)로 편향이 반전되어 층별 교차 설계 필요"
+            "Cliff's delta (WUI)": tpi["cliffs_delta"],
+            "권장 피처 처리 방식": "공간층별 상호작용 후보로만 사용",
+            "선정/제외 사유": (
+                f"WUI에서는 음수 방향(delta={tpi['cliffs_delta']:.3f}); 산림 내부 양수 방향은 "
+                f"q={format_p(tpi_interior['welch_q_value_fdr'])}로 경계적 탐색 신호"
+            ),
         },
         {
             "변수명": "임도_최단거리_m",
             "등급": "보고서 보조",
-            "Cliff's delta (WUI)": 0.104,
-            "권장 피처 처리 방식": "선형 거리 변수",
-            "선정/제외 사유": "WUI 내부 발화에는 미치는 영향이 작으나, 산림 접근권 층에서는 보조 피처로 유효함"
+            "Cliff's delta (WUI)": forest_road["cliffs_delta"],
+            "권장 피처 처리 방식": "선형 거리 변수, 산림 접근권 보조 변수",
+            "선정/제외 사유": f"WUI 내부 효과는 약하고 방향도 도로와 다름(delta={forest_road['cliffs_delta']:.3f})",
         },
         {
             "변수명": "등산로_최단거리_m",
-            "등급": "후속 모델링 후보",
-            "Cliff's delta (WUI)": -0.068,
-            "권장 피처 처리 방식": "산림 접근권 층에서의 인터랙션 피처(is_forest_access * hiking_dist)",
-            "선정/제외 사유": "산림 접근권 층 내부(Cliff's delta -0.219)에서 뚜렷한 음수 효과를 보임"
+            "등급": "보고서 보조",
+            "Cliff's delta (WUI)": trail["cliffs_delta"],
+            "권장 피처 처리 방식": "산림 접근권 층에서만 조건부 탐색 변수",
+            "선정/제외 사유": (
+                f"산림 접근권 방향 후보(delta={trail_access['cliffs_delta']:.3f})이나 "
+                f"FDR q={format_p(trail_access['welch_q_value_fdr'])}로 확정 근거는 부족"
+            ),
         },
         {
             "변수명": "TWI(지형다습지수)",
             "등급": "제외/보류",
             "Cliff's delta (WUI)": np.nan,
             "권장 피처 처리 방식": "N/A",
-            "선정/제외 사유": "수문학적 흐름 누적 연산 한계로 대조군에서 계산 불가하여 주 비교 변수에서 보류"
+            "선정/제외 사유": "수문학적 흐름 누적 연산 한계로 대조군에서 계산하지 않아 주 비교 변수에서 보류",
         },
         {
             "변수명": "addr_type (임야번지)",
             "등급": "제외/보류",
             "Cliff's delta (WUI)": np.nan,
             "권장 피처 처리 방식": "N/A",
-            "선정/제외 사유": "실제 토지피복 산림지역과 오차가 56%에 달해 취약성 프록시로 사용하기에 부적합하여 제외 권고"
-        }
+            "선정/제외 사유": "실제 토지피복 산림지역과 괴리가 커 취약성 프록시로 사용하지 않음",
+        },
     ]
-    df_handoff = pd.DataFrame(handoff_data)
+    return pd.DataFrame(rows)
+
+
+def main() -> None:
+    print("--- S4-06: 최종 EDA 공간 요약 시작 ---")
+
+    stats = pd.read_csv(TABLE_DIR / "S4-05_effect_size_by_variable.csv", encoding="utf-8-sig")
+    lc = pd.read_csv(TABLE_DIR / "S4-05_landcover_crosstab.csv", encoding="utf-8-sig")
+    fire = pd.read_csv(TABLE_DIR / "S4-03_spatial_layer_assignment.csv", encoding="utf-8-sig")
+    controls = pd.read_csv(TABLE_DIR / "S4-04_spatial_control_pool.csv", encoding="utf-8-sig")
+
+    matched_fire_ids = set(controls["matched_fire_id"].dropna())
+    fire_primary = fire[fire["fire_id"].isin(matched_fire_ids)].copy()
+    fire_wui = fire_primary[fire_primary["spatial_layer_500"].eq("생활권-WUI")].copy()
+    control_wui = controls[controls["spatial_layer_500"].eq("생활권-WUI")].copy()
+
+    road = stat_row(stats, "생활권-WUI", "도로_최단거리_m")
+    urban = stat_row(stats, "생활권-WUI", "시가화_최단거리_m")
+    forest = stat_row(stats, "생활권-WUI", "산림_최단거리_m")
+    slope = stat_row(stats, "생활권-WUI", "경사도(도)")
+    tpi = stat_row(stats, "생활권-WUI", "TPI(지형위치지수)")
+    tpi_interior = stat_row(stats, "산림 내부", "TPI(지형위치지수)")
+    trail_access = stat_row(stats, "산림 접근권", "등산로_최단거리_m")
+
+    road_10_fire_pct = float((fire_wui["도로_최단거리_m"] <= 10).mean() * 100)
+    road_10_control_pct = float((control_wui["도로_최단거리_m"] <= 10).mean() * 100)
+
+    frame = "eligible_comparable" if "comparison_frame" in lc.columns else "primary_raw"
+    urban_fire_pct = pct_value(lc, "생활권-WUI", frame, "시가화건조지역", "fire_pct")
+    grass_fire_pct = pct_value(lc, "생활권-WUI", frame, "초지", "fire_pct")
+    forest_fire_pct = pct_value(lc, "생활권-WUI", frame, "산림지역", "fire_pct")
+    forest_control_pct = pct_value(lc, "생활권-WUI", frame, "산림지역", "control_pct")
+
+    summary_data = [
+        {
+            "요약 메시지": (
+                f"도로 초근접성 편향: WUI 내 발생지의 {road_10_fire_pct:.1f}%가 도로 10m 이내에 있으며 "
+                f"대조군은 {road_10_control_pct:.1f}%에 그침"
+            ),
+            "근거 표": (
+                f"S4-05_effect_size_by_variable.csv "
+                f"(WUI 도로 Cliff's delta {road['cliffs_delta']:.3f}, q={format_p(road['welch_q_value_fdr'])})"
+            ),
+            "근거 플롯": "S4-05_key_variable_ecdf.png",
+            "해석 가능 범위": "동일 기상셀·동일 공간층 조건에서도 발생지가 도로 초근접 구간에 강하게 몰림",
+            "해석 금지 문장": "도로변 담뱃재 투기나 차량 화재가 직접 주원인이라고 인과 단정하는 것",
+        },
+        {
+            "요약 메시지": (
+                f"비교가능 토지피복 프레임에서 WUI 발생지는 시가화 {urban_fire_pct:.1f}%, "
+                f"초지 {grass_fire_pct:.1f}%, 산림지역 {forest_fire_pct:.1f}%로 구성됨"
+            ),
+            "근거 표": (
+                f"S4-05_landcover_crosstab.csv ({frame}; 대조군 산림지역 {forest_control_pct:.1f}%)"
+            ),
+            "근거 플롯": "N/A",
+            "해석 가능 범위": "대조군과 동일한 제외 규칙을 맞춘 뒤에도 발생지는 비산림 WUI 접경 피복 비중이 큼",
+            "해석 금지 문장": "건물 자체가 산불을 유도하거나 특정 토지피복이 원인이라고 해석하는 것",
+        },
+        {
+            "요약 메시지": (
+                f"WUI에서는 저고도·완만한 경사·음수 TPI 방향이 관찰되지만, 산림 내부 TPI 양수 방향은 "
+                f"q={format_p(tpi_interior['welch_q_value_fdr'])}의 경계적 탐색 신호임"
+            ),
+            "근거 표": (
+                f"S4-05_effect_size_by_variable.csv "
+                f"(WUI 경사 delta {slope['cliffs_delta']:.3f}, WUI TPI {tpi['cliffs_delta']:.3f}, "
+                f"산림 내부 TPI {tpi_interior['cliffs_delta']:.3f})"
+            ),
+            "근거 플롯": "S4-05_effect_size_forest.png",
+            "해석 가능 범위": "공간층에 따라 지형 지표의 방향이 달라질 수 있다는 후보를 제시함",
+            "해석 금지 문장": "산림 내부 능선부 취약성이 통계적으로 확정되었다고 단정하는 것",
+        },
+        {
+            "요약 메시지": (
+                f"산림 접근권 등산로 최단거리는 delta {trail_access['cliffs_delta']:.3f}의 방향성은 있으나 "
+                f"FDR q={format_p(trail_access['welch_q_value_fdr'])}로 유의한 결과가 아님"
+            ),
+            "근거 표": "S4-05_effect_size_by_variable.csv",
+            "근거 플롯": "S4-05_effect_size_forest.png",
+            "해석 가능 범위": "소표본 보조 신호로만 기록하고 후속 자료에서 재검증함",
+            "해석 금지 문장": "등산로 인접성이 산림 접근권에서 확정적 취약 인자라고 표현하는 것",
+        },
+    ]
+    df_summary = pd.DataFrame(summary_data)
+    df_summary.to_csv(TABLE_DIR / "S4-06_final_spatial_eda_summary.csv", index=False, encoding="utf-8-sig")
+    print("S4-06_final_spatial_eda_summary.csv 생성 완료")
+
+    df_handoff = build_handoff(stats)
     df_handoff.to_csv(TABLE_DIR / "S4-06_spatial_variable_handoff.csv", index=False, encoding="utf-8-sig")
     print("S4-06_spatial_variable_handoff.csv 생성 완료")
-    
-    # 3. Generate S4-06_interpretation_limits.csv
+
     limits_data = [
         {
             "구분": "도로/인프라 인접성",
-            "해석 가능 범위": "동일 기상 및 공간층 하에서 발생지가 대조군보다 도로 및 시가화 구역에 물리적으로 더 밀착되어 분포함",
-            "해석 금지/주의 사항": "도로변 담뱃재 투기나 차량 화재 등이 산불의 직접 원인이라고 인과를 단정 짓는 것",
-            "대안 및 보완책": "물리적 노출 및 발원 취약 지대로만 기술하고, 발화 원인은 소방청 화인 통계 등과 별도 교차 분석할 것"
+            "해석 가능 범위": "동일 기상셀·동일 공간층 하에서 발생지가 대조군보다 도로 및 시가화 구역에 더 가까운 분포를 보임",
+            "해석 금지/주의 사항": "도로변 담뱃재 투기나 차량 화재가 직접 원인이라고 인과 단정하는 것",
+            "대안 및 보완책": "물리적 노출 및 발원 취약 지대로만 기술하고, 발화 원인은 소방 원인자료와 별도 교차 분석할 것",
         },
         {
             "구분": "토지피복과 WUI 경계",
-            "해석 가능 범위": "WUI 내 산불의 85% 이상이 실제 산림 피복 바깥의 시가화/초지 등 인프라 접경선에서 발원함",
-            "해석 금지/주의 사항": "산림 면적이 좁은 지역이 산불에 취약하다거나, 건물 자체가 산불을 유도한다고 해석하는 것",
-            "대안 및 보완책": "인간 활동 반경의 끝이자 산림 연료층의 시작점인 WUI 경계부가 물리적 연료 교차 공간임을 설명할 것"
+            "해석 가능 범위": "대조군과 같은 제외 프레임에서도 발생지가 비산림 WUI 접경 피복에 더 많이 놓임",
+            "해석 금지/주의 사항": "토지피복 유형 자체가 산불 원인이라고 해석하거나, 비대칭 제외 규칙의 원시 비율만으로 결론 내리는 것",
+            "대안 및 보완책": "`eligible_comparable` 프레임의 민감도 비율과 원시 비율을 함께 보고할 것",
         },
         {
-            "구분": "지형 지표 (고도/경사)",
-            "해석 가능 범위": "산불 발생지가 상대적으로 완만한 경사 및 저지대 골짜기 사면에 편향되어 분포함",
-            "해석 금지/주의 사항": "특정 고도나 경사 수치가 산불을 유발하는 직접적 인자라고 인과적으로 해석하는 것",
-            "대안 및 보완책": "기후지형유형 권역 분류에 따른 고도 분포의 층화 양상과 바람 경로(골짜기 푄 효과)와의 기하학적 정합성으로 설명할 것"
+            "구분": "지형 지표",
+            "해석 가능 범위": "WUI에서는 저고도·완만한 경사·음수 TPI 방향이 관찰되고, 산림 내부 TPI는 양수 방향의 탐색 신호를 보임",
+            "해석 금지/주의 사항": "산림 내부 능선부 취약성을 확정하거나 특정 고도·TPI가 산불을 유발한다고 해석하는 것",
+            "대안 및 보완책": "공간층별 상호작용 후보로 모델링에서 검증하고, 소표본 층은 효과크기와 q값을 함께 제시할 것",
         },
         {
             "구분": "대조군 부족 71건",
-            "해석 가능 범위": "71건의 대조군 부족은 강원도 격자 경계선 및 토지피복 미매칭 품질 한계에 따른 것이며, 주 분석 표본과 큰 분포 차이가 없음",
-            "해석 금지/주의 사항": "이 71건의 제외가 주 분석 결과의 통계적 유의성에 왜곡을 초래했거나, 대조군이 없는 위험지라고 해석하는 것",
-            "대안 및 보완책": "선택 편향 검증(민감도 표) 결과를 제시하고, 격자 경계부 토지피복 GIS 데이터 품질의 한계로 해석을 제한할 것"
-        }
+            "해석 가능 범위": "71건의 대조군 부족은 표본 프레임 품질 한계이며, 기술통계 민감도에서 큰 차이는 관찰되지 않음",
+            "해석 금지/주의 사항": "대조군이 없는 위험지라고 해석하거나, 정식 검정 없이 선택 편향이 없다고 입증했다고 표현하는 것",
+            "대안 및 보완책": "주 분석 표본과 전체 발생지의 기술통계 차이를 민감도 표로 제시할 것",
+        },
+        {
+            "구분": "등산로/산림 접근권",
+            "해석 가능 범위": "소표본에서 방향성 후보가 보였으나 FDR 기준 유의 결과는 아님",
+            "해석 금지/주의 사항": "등산로 인접성을 확정적 취약 인자 또는 등산객 원인으로 쓰는 것",
+            "대안 및 보완책": "후속 모델링에서는 조건부 후보로만 포함하고 별도 검증 기준을 둘 것",
+        },
     ]
     df_limits = pd.DataFrame(limits_data)
     df_limits.to_csv(TABLE_DIR / "S4-06_interpretation_limits.csv", index=False, encoding="utf-8-sig")
     print("S4-06_interpretation_limits.csv 생성 완료")
-    
-    # 4. Generate S4-06_final_spatial_summary_plot.png
+
     print("S4-06 최종 요약 플롯 생성 중...")
     df_plot = df_handoff.dropna(subset=["Cliff's delta (WUI)"]).copy()
     df_plot["abs_delta"] = df_plot["Cliff's delta (WUI)"].abs()
     df_plot = df_plot.sort_values(by="abs_delta", ascending=True)
-    
+
     colors = []
     for grade in df_plot["등급"]:
         if grade == "EDA 핵심":
-            colors.append("#d73027")  # Red
+            colors.append("#d73027")
         elif grade == "후속 모델링 후보":
-            colors.append("#fc8d59")  # Orange
+            colors.append("#fc8d59")
         elif grade == "보고서 보조":
-            colors.append("#fee090")  # Yellow
+            colors.append("#fee090")
         else:
-            colors.append("#e0f3f8")  # Blue
-            
+            colors.append("#e0f3f8")
+
     fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.barh(df_plot["변수명"], df_plot["Cliff's delta (WUI)"], color=colors, edgecolor="black", linewidth=0.7)
-    
-    # Add vertical line at 0
+    bars = ax.barh(
+        df_plot["변수명"],
+        df_plot["Cliff's delta (WUI)"],
+        color=colors,
+        edgecolor="black",
+        linewidth=0.7,
+    )
     ax.axvline(0, color="gray", linestyle="--", linewidth=1)
-    
-    # Add labels on bars
     for bar, grade in zip(bars, df_plot["등급"]):
         width = bar.get_width()
         x_pos = width + 0.02 if width >= 0 else width - 0.12
-        ax.text(x_pos, bar.get_y() + bar.get_height()/2, f"{grade}", 
-                va="center", ha="left" if width >= 0 else "right", fontsize=9, fontweight="bold")
-                
+        ax.text(
+            x_pos,
+            bar.get_y() + bar.get_height() / 2,
+            grade,
+            va="center",
+            ha="left" if width >= 0 else "right",
+            fontsize=9,
+            fontweight="bold",
+        )
+
     ax.set_title("S4-06 후속 모델링 이관 변수 등급 및 WUI 효과크기(Cliff's delta) 요약", fontsize=13, fontweight="bold", pad=15)
     ax.set_xlabel("WUI 내 Cliff's delta 효과크기", fontsize=11)
     ax.set_ylabel("변수명", fontsize=11)

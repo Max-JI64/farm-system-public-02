@@ -209,6 +209,20 @@ def main() -> None:
     
     # Unmatched fires (shortage cases)
     df_fire_unmatched = df_fire[~df_fire["fire_id"].isin(matched_fire_ids)].copy()
+
+    # Apply the same landcover eligibility frame used in S4-04 controls as a sensitivity flag.
+    # This prevents landcover composition claims from mixing control exclusions with raw fire points.
+    df_fire_primary["landcover_unmatched"] = df_fire_primary["L1_NAME"].isna() | df_fire_primary["L1_NAME"].eq("미분류")
+    df_fire_primary["is_water"] = df_fire_primary["L1_NAME"].eq("수역")
+    df_fire_primary["is_urban_core"] = df_fire_primary["L1_NAME"].eq("시가화건조지역") & (
+        df_fire_primary["산림_최단거리_m"] > 100
+    )
+    df_fire_primary["eligible_control_frame"] = ~(
+        df_fire_primary["landcover_unmatched"]
+        | df_fire_primary["is_water"]
+        | df_fire_primary["is_urban_core"]
+    )
+    df_control_primary["eligible_control_frame"] = df_control_primary.get("eligible", True)
     
     print(f"주 분석 대상 발생지 수: {len(df_fire_primary)}행, 대조군 수: {len(df_control_primary)}행")
     print(f"대조군 미배정 발생지 수: {len(df_fire_unmatched)}행")
@@ -354,24 +368,37 @@ def main() -> None:
     df_sum.to_csv(TABLE_DIR / "S4-05_fire_vs_spatial_control_summary.csv", index=False, encoding="utf-8-sig")
     
     # 8. Categorical Variable Crosstab Analysis
-    # Compare L1_NAME composition
+    # Compare L1_NAME composition both in the raw primary frame and in the S4-04 eligibility frame.
     lc_crosstab_list = []
-    for layer in ["전체", "생활권-WUI"]:
-        if layer == "전체":
-            f_sub = df_fire_primary
-            c_sub = df_control_primary
-        else:
-            f_sub = df_fire_primary[df_fire_primary["spatial_layer_500"] == layer]
-            c_sub = df_control_primary[df_control_primary["spatial_layer_500"] == layer]
-            
-        f_counts = f_sub["L1_NAME"].value_counts(dropna=False).rename("fire_n")
-        c_counts = c_sub["L1_NAME"].value_counts(dropna=False).rename("control_n")
-        
-        lc_df = pd.concat([f_counts, c_counts], axis=1).fillna(0).astype(int)
-        lc_df["fire_pct"] = (lc_df["fire_n"] / lc_df["fire_n"].sum()) * 100
-        lc_df["control_pct"] = (lc_df["control_n"] / lc_df["control_n"].sum()) * 100
-        lc_df["spatial_layer"] = layer
-        lc_crosstab_list.append(lc_df.reset_index().rename(columns={"index": "L1_NAME"}))
+    for frame_name, fire_frame, control_frame in [
+        ("primary_raw", df_fire_primary, df_control_primary),
+        (
+            "eligible_comparable",
+            df_fire_primary[df_fire_primary["eligible_control_frame"]].copy(),
+            df_control_primary[df_control_primary["eligible_control_frame"].astype(bool)].copy(),
+        ),
+    ]:
+        for layer in ["전체", "생활권-WUI"]:
+            if layer == "전체":
+                f_sub = fire_frame
+                c_sub = control_frame
+            else:
+                f_sub = fire_frame[fire_frame["spatial_layer_500"] == layer]
+                c_sub = control_frame[control_frame["spatial_layer_500"] == layer]
+
+            f_counts = f_sub["L1_NAME"].value_counts(dropna=False).rename("fire_n")
+            c_counts = c_sub["L1_NAME"].value_counts(dropna=False).rename("control_n")
+
+            lc_df = pd.concat([f_counts, c_counts], axis=1).fillna(0).astype(int)
+            fire_total = lc_df["fire_n"].sum()
+            control_total = lc_df["control_n"].sum()
+            lc_df["fire_pct"] = (lc_df["fire_n"] / fire_total) * 100 if fire_total else 0.0
+            lc_df["control_pct"] = (lc_df["control_n"] / control_total) * 100 if control_total else 0.0
+            lc_df["spatial_layer"] = layer
+            lc_df["comparison_frame"] = frame_name
+            lc_df["fire_total_n"] = int(fire_total)
+            lc_df["control_total_n"] = int(control_total)
+            lc_crosstab_list.append(lc_df.reset_index().rename(columns={"index": "L1_NAME"}))
         
     df_lc_crosstab = pd.concat(lc_crosstab_list)
     df_lc_crosstab.to_csv(TABLE_DIR / "S4-05_landcover_crosstab.csv", index=False, encoding="utf-8-sig")
@@ -386,8 +413,10 @@ def main() -> None:
     f_wui = df_fire_primary[df_fire_primary["spatial_layer_500"] == "생활권-WUI"].copy()
     c_wui = df_control_primary[df_control_primary["spatial_layer_500"] == "생활권-WUI"].copy()
     
-    f_wui["group"] = "산불 발생지 (n=1401)"
-    c_wui["group"] = "공간 대조군 (n=4224)"
+    fire_label = f"산불 발생지 (n={len(f_wui)})"
+    control_label = f"공간 대조군 (n={len(c_wui)})"
+    f_wui["group"] = fire_label
+    c_wui["group"] = control_label
     
     df_plot_ecdf = pd.concat([f_wui[["도로_최단거리_m", "group"]], c_wui[["도로_최단거리_m", "group"]]])
     
@@ -395,7 +424,7 @@ def main() -> None:
         data=df_plot_ecdf,
         x="도로_최단거리_m",
         hue="group",
-        palette={"산불 발생지 (n=1401)": "#d73027", "공간 대조군 (n=4224)": "#1f78b4"},
+        palette={fire_label: "#d73027", control_label: "#1f78b4"},
         linewidth=2.5
     )
     plt.title("생활권-WUI 공간층 내 도로 최단거리(m) 누적분포함수(ECDF) 비교", fontsize=13, fontweight="bold", pad=15)
