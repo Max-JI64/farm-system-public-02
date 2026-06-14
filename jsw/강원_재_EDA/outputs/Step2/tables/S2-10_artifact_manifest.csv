@@ -1,0 +1,10 @@
+artifact_type,filename,path,rows,columns
+table,S2-10_analysis_scope.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-10_analysis_scope.csv,3.0,2.0
+table,S2-10_delta_correlation_matrix.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-10_delta_correlation_matrix.csv,78.0,18.0
+table,S2-10_correlation_heterogeneity_tests.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-10_correlation_heterogeneity_tests.csv,78.0,8.0
+table,S2-10_joint_density_stats.csv,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\tables\S2-10_joint_density_stats.csv,4.0,4.0
+plot,S2-10_raw_correlation_heatmap.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-10_raw_correlation_heatmap.png,,
+plot,S2-10_delta_correlation_heatmap.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-10_delta_correlation_heatmap.png,,
+plot,S2-10_joint_density_wind_humidity.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-10_joint_density_wind_humidity.png,,
+plot,S2-10_joint_density_ffmc_isi.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-10_joint_density_ffmc_isi.png,,
+plot,S2-10_joint_density_bui_fwi.png,D:\farm-system-public-02\jsw\강원_재_EDA\outputs\Step2\plots\S2-10_joint_density_bui_fwi.png,,
