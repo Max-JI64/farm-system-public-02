@@ -6,6 +6,6 @@ AGENTS.md
 .codex
 .agentmemory
 
-jsw/강원_재_EDA/*.py
-jsw/강원_재_EDA/*.txt
 jsw/강원_재_EDA/outputs/
+jsw/Analysis/logistic/outputs
+원천데이터/
