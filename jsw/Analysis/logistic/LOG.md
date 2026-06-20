@@ -2119,3 +2119,133 @@ EDA에서 확인한 위험방향과 모델링 표본의 충족률 방향이 일�
   3. 최종 보고서용 로지스틱 해석표에는 Step16 추천 모델의 OR, 95% CI, q-value를 사용한다.
   4. EDA 문장과 로지스틱 결과를 연결하는 해석 문단을 작성한다.
   5. “로지스틱으로 가능한 결론”과 “로지스틱으로는 어려운 한계”를 분리한다.
+
+## 2026-06-20 Step17 최종 로지스틱 결과 통합 정리 완료
+
+### 목적
+
+- Step18은 별도로 만들지 않고 Step17에 통합했다.
+- 새 모델을 더 학습하지 않고, 지금까지 만든 Stage11·Stage16 산출물을 최종 보고서용으로 정리했다.
+- 통합 대상:
+  - 머신러닝 비교용 로지스틱 성능표
+  - 최종 해석용 오즈비 표
+  - EDA와 로지스틱 결과 연결표
+  - threshold/운영 성능 요약
+  - 상위 위험도 구간 포착률
+
+### 실행 파일
+
+- `jsw/Analysis/logistic/stage17_final_logistic_report.py`
+
+### 최종 모델 역할 구분
+
+| 역할 | 모델 | 판단 |
+|---|---|---|
+| 성능 비교용 대표 로지스틱 | `PLUS_LANDCOVER_RULES_ANOVA` | 머신러닝 모델과 비교할 로지스틱 기준 모델 |
+| F1 운영점 보조 로지스틱 | `PLUS_LANDCOVER` | threshold 보조 비교에만 사용 |
+| 최종 해석용 로지스틱 | `FINAL_REDUCED_WITH_FWI` | OR·EDA 연결 해석에 사용 |
+| 토지피복 플래그 비교 모델 | `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS` | AUPRC는 근소하게 높지만 VIF가 높아 해석 모델에서 제외 |
+
+### 머신러닝 비교용 성능표
+
+| 모델 | AUPRC | ROC AUC | Brier | Log loss | Best-F1 | Precision | Recall | Accuracy | Balanced accuracy | max VIF |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `PLUS_LANDCOVER_RULES_ANOVA` | 0.2398 | 0.7768 | 0.07697 | 0.26589 | 0.3047 | 0.2107 | 0.5507 | 0.7711 | 0.6719 | - |
+| `PLUS_LANDCOVER` | 0.2300 | 0.7763 | 0.07757 | 0.26772 | 0.3063 | 0.2210 | 0.4992 | 0.7940 | 0.6614 | - |
+| `FINAL_REDUCED_WITH_FWI` | 0.2590 | 0.7569 | 0.07585 | 0.26715 | 0.3015 | 0.2142 | 0.5089 | 0.7852 | 0.6609 | 2.27 |
+| `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS` | 0.2600 | 0.7652 | 0.07566 | 0.26473 | 0.3007 | 0.2200 | 0.4750 | 0.7987 | 0.6531 | 50.62 |
+
+판단:
+
+- 성능만 보면 `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS`가 AUPRC 0.2600으로 가장 높다.
+- 하지만 max VIF가 50.62라 계수와 OR 해석에는 부적합하다.
+- 최종 보고서에서는:
+  - 머신러닝 비교용 성능 기준: `PLUS_LANDCOVER_RULES_ANOVA`
+  - 오즈비·EDA 해석 기준: `FINAL_REDUCED_WITH_FWI`
+  - 공선성 제외 근거: `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS`
+
+### threshold/운영 성능 요약
+
+| 모델 | 운영점 | threshold | 선택 비율 | Precision | Recall | F1 | Balanced accuracy |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `PLUS_LANDCOVER_RULES_ANOVA` | best-F1 | 0.1483 | 0.2382 | 0.2107 | 0.5507 | 0.3047 | 0.6719 |
+| `PLUS_LANDCOVER_RULES_ANOVA` | recall>=0.70 | 0.0995 | 0.3359 | 0.1900 | 0.7005 | 0.2989 | 0.7006 |
+| `PLUS_LANDCOVER_RULES_ANOVA` | recall>=0.90 | 0.0411 | 0.5202 | 0.1577 | 0.9002 | 0.2683 | 0.7090 |
+| `FINAL_REDUCED_WITH_FWI` | best-F1 | 0.1355 | 0.2164 | 0.2142 | 0.5089 | 0.3015 | 0.6609 |
+| `FINAL_REDUCED_WITH_FWI` | recall>=0.70 | 0.0893 | 0.3717 | 0.1717 | 0.7005 | 0.2758 | 0.6809 |
+| `FINAL_REDUCED_WITH_FWI` | recall>=0.90 | 0.0515 | 0.5847 | 0.1403 | 0.9002 | 0.2427 | 0.6735 |
+
+해석:
+
+- 0.50 고정 threshold는 불균형 자료에서 너무 보수적이므로 핵심 비교 기준으로 쓰지 않는다.
+- best-F1 threshold는 모델 간 비교용으로 사용한다.
+- recall 0.70 또는 0.90 기준은 더 많이 잡기 위해 어느 정도 경보량을 늘려야 하는지 보여주는 보조 운영표로 둔다.
+
+### 상위 위험도 구간 포착률
+
+| 모델 | 상위 위험도 구간 | 선택 수 | 포착 산불 수 | 전체 산불 중 포착률 | Precision | Lift |
+|---|---:|---:|---:|---:|---:|---:|
+| `PLUS_LANDCOVER_RULES_ANOVA` | 5% | 682 | 201/1242 | 0.1618 | 0.2947 | 3.23 |
+| `PLUS_LANDCOVER_RULES_ANOVA` | 10% | 1364 | 351/1242 | 0.2826 | 0.2573 | 2.82 |
+| `PLUS_LANDCOVER_RULES_ANOVA` | 20% | 2727 | 595/1242 | 0.4791 | 0.2182 | 2.39 |
+| `FINAL_REDUCED_WITH_FWI` | 5% | 682 | 214/1242 | 0.1723 | 0.3138 | 3.44 |
+| `FINAL_REDUCED_WITH_FWI` | 10% | 1364 | 360/1242 | 0.2899 | 0.2639 | 2.90 |
+| `FINAL_REDUCED_WITH_FWI` | 20% | 2727 | 590/1242 | 0.4750 | 0.2164 | 2.37 |
+
+해석:
+
+- 상위 5%만 점검하면 `FINAL_REDUCED_WITH_FWI`는 전체 산불 노출의 17.23%를 포착하고 precision은 31.38%이다.
+- 기준 양성률 9.11% 대비 lift는 3.44이다.
+- 상위 위험도 구간 포착률은 불균형 자료에서 threshold 하나보다 운영적으로 설명하기 쉽다.
+
+### 최종 OR 해석 기준
+
+- 최종 OR 표는 `FINAL_REDUCED_WITH_FWI` 기준으로 확정했다.
+- 주요 유의 신호:
+  - `rh_local_q05`: OR 2.477
+  - `dry_spell_5p0_gt_240h`: OR 1.667
+  - `D1_FWI` 5점 증가: OR 1.155
+  - `wind_max_6h` 1m/s 증가: OR 1.113
+  - `직전24h_최소습도` 5%p 감소: OR 1.074
+  - `log1p_도로거리_m`: OR 0.758
+  - `고도(m)` 100m 증가: OR 0.900
+- 비유의 또는 주의 항목:
+  - `서풍계열_여부` 단독은 비유의
+  - 기후지형유형 더미는 조건부 층화 효과로 해석하고, 위험 자체의 단순 순위로 쓰지 않음
+
+### EDA와 연결되는 최종 메시지
+
+- 습도:
+  - EDA의 직전 24~48시간 저습·국지 상대건조 결론이 로지스틱에서도 유지됐다.
+- 무강수:
+  - 강수량 자체보다 5mm 이상 강수 후 장기 무강수 지속이 유의하게 남았다.
+- 바람:
+  - 풍속은 약하지만 독립 양의 신호로 남았다.
+  - 서풍계열 단독보다 저습·풍속·영동 조건의 결합을 EDA 중심으로 설명한다.
+- 공간:
+  - 도로 초접경 편향은 로지스틱에서도 가장 방어 가능한 공간 결론이다.
+- 캐나다지수:
+  - 전체 지수 동시 투입은 공선성 때문에 피하고, `D1_FWI` 단독을 보조 종합지수로 사용한다.
+- 토지피복:
+  - 토지피복 세부 범주는 최종 해석 모델에서 제외하고 EDA 보조 설명으로만 둔다.
+
+### 산출물
+
+- `outputs/stage17_final_logistic_report_summary.md`
+- `outputs/tables/stage17_model_role_summary.csv`
+- `outputs/tables/stage17_ml_comparison_metrics.csv`
+- `outputs/tables/stage17_operating_thresholds.csv`
+- `outputs/tables/stage17_top_risk_capture.csv`
+- `outputs/tables/stage17_final_or_report_table.csv`
+- `outputs/tables/stage17_eda_linkage_table.csv`
+- `outputs/plots/stage17_metric_role_comparison.png`
+- `outputs/plots/stage17_top_risk_capture.png`
+
+### 다음 단계
+
+- 로지스틱 모델링 자체는 여기서 멈춰도 된다.
+- 이후 작업은 모델 추가가 아니라 최종 보고서 문장화 단계로 진행한다.
+- 필요하면 다음에 할 일:
+  1. `final_eda.md` 문체에 맞춰 로지스틱 결과 장 작성
+  2. 머신러닝팀 결과와 붙일 성능 비교 표 포맷 통일
+  3. 최종 보고서에서 “성능 모델”과 “해석 모델”을 분리해 설명
