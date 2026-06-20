@@ -1470,3 +1470,652 @@ EDA에서 확인한 위험방향과 모델링 표본의 충족률 방향이 일�
 - strict `date_exposure_component_cv` 기준을 유지한다.
 - 기존 EDA인 `jsw/final_eda.md`와 연결되는 방향으로 해석한다.
 - 성능 모델과 해석 모델을 혼동하지 않는다.
+
+## 2026-06-20 — Step 11 최종 로지스틱 성능 기준 모델 확정
+
+### 수행 배경
+
+상태: 완료
+
+- 다른 모델 결과와 비교할 로지스틱 기준선을 고정했다.
+- 기존 Stage 9~10의 strict `date_exposure_component_cv` development OOF 결과만 사용했다.
+- lockbox는 사용하지 않았다.
+- 요인점수는 제외한 흐름을 유지했다.
+- 비통계적 이진분류 모델은 포함하지 않았다.
+
+### 작성/실행 파일
+
+- `stage11_final_logistic_benchmark.py`
+
+### 최종 모델 판단
+
+| 용도 | 모델 | 판단 |
+|---|---|---|
+| 대표 성능 모델 | `PLUS_LANDCOVER_RULES_ANOVA` | AUPRC, ROC AUC, Brier, log loss, 0-A AUPRC 기준에서 가장 안정적 |
+| F1 운영점 보조 모델 | `PLUS_LANDCOVER` | best-F1이 가장 높아 F1 중심 비교 시 함께 제시 |
+
+### 대표 성능 모델 결과
+
+`PLUS_LANDCOVER_RULES_ANOVA`
+
+- AUPRC: 0.2398
+- ROC AUC: 0.7768
+- Brier score: 0.07697
+- log loss: 0.26589
+- best-F1 threshold: 0.1483
+- Accuracy: 0.7711
+- Precision: 0.2107
+- Recall: 0.5507
+- F1-score: 0.3047
+- MCC: 0.2323
+- 0-A AUPRC: 0.2500
+
+### F1 운영점 보조 모델 결과
+
+`PLUS_LANDCOVER`
+
+- AUPRC: 0.2300
+- ROC AUC: 0.7763
+- Brier score: 0.07757
+- log loss: 0.26772
+- best-F1 threshold: 0.1645
+- Accuracy: 0.7940
+- Precision: 0.2210
+- Recall: 0.4992
+- F1-score: 0.3063
+- MCC: 0.2297
+
+### 해석
+
+- development OOF 표본의 양성 비율은 0.0911이다.
+- 대표 모델의 AUPRC 0.2398은 무작위 기준 양성 비율 대비 약 2.63배이다.
+- ROC AUC 0.7768로 순위화 성능은 중간 이상이지만, best-F1 precision은 0.2107 수준이라 실제 양성 예측의 정밀도는 높지 않다.
+- fixed 0.5 threshold에서는 대표 모델 recall이 0.0419에 그쳐 운영 기준으로 부적절하다.
+- 따라서 최종 보고서에서는 로지스틱을 “고정 threshold 예측기”보다 “위험도 순위화 및 변수 해석 모델”로 설명하는 것이 적절하다.
+- class-weight 또는 0-A 가중 모델은 recall 일부를 높일 수 있으나 Brier/log loss가 악화되어 최종 대표 모델로 쓰지 않는다.
+
+### 산출물
+
+- `outputs/stage11_final_logistic_benchmark_summary.md`
+- `outputs/tables/stage11_final_logistic_benchmark.csv`
+- `outputs/tables/stage11_final_logistic_benchmark.md`
+- `outputs/tables/stage11_final_model_decision.csv`
+- `outputs/tables/stage11_threshold_operating_points.csv`
+- `outputs/plots/stage11_final_logistic_benchmark_metrics.png`
+- `26.06.18_로지스틱_모델링.ipynb` 재현 실행 블록에 `stage11_final_logistic_benchmark.py` 호출 추가
+
+### 다음 단계
+
+- Step 12로 진행한다.
+- Step 12에서는 성능 모델과 별도로 EDA 결론과 연결되는 해석용 로지스틱 변수셋을 구성한다.
+- 성능 모델의 ANOVA 선택 계수를 그대로 오즈비 해석에 사용하지 않는다.
+
+## 2026-06-20 — Step 12 해석용 로지스틱 변수셋 구성
+
+### 수행 배경
+
+상태: 완료
+
+- 성능 최고 모델의 ANOVA 선택 계수를 그대로 오즈비 해석에 사용하지 않기 위해 해석용 변수셋을 별도로 구성했다.
+- 기존 EDA 결론과 직접 연결되는 변수만 우선했다.
+- 요인점수는 제외했다.
+- 비통계적 이진분류 모델은 포함하지 않았다.
+- lockbox는 열지 않고 strict development 표본만 진단했다.
+
+### 작성/실행 파일
+
+- `stage12_interpret_feature_set.py`
+
+### 입력 데이터
+
+- 기본 데이터: `data/학습데이터/학습데이터_로지스틱_D2D3.csv`
+- Stage7 파생피처: `outputs/features/stage7_engineered_features.csv`
+- strict split: `outputs/splits/outer_cv_manifest.csv`
+
+### 처리 방식
+
+1. `학습데이터_로지스틱_D2D3.csv`를 로드했다.
+2. `샘플ID` 기준으로 Stage7 파생피처를 one-to-one 병합했다.
+3. Stage9의 규칙형 피처를 생성했다.
+4. strict development 표본 13,632행만 사용해 변수 존재 여부, 결측률, Target별 분포를 진단했다.
+5. EDA 결론과 연결되는 해석용 변수셋 3종을 확정했다.
+
+### 표본 상태
+
+- 전체 병합 데이터: 17,045행 × 177열
+- development 표본: 13,632행
+- Target 0: 12,390건
+- Target 1: 1,242건
+- development 양성 비율: 0.0911
+
+### 확정한 해석용 변수셋
+
+| 변수셋 | 변수 수 | 범주형 수 | 수치/이진 수 | 목적 |
+|---|---:|---:|---:|---|
+| `INTERPRET_WEATHER_SPACE` | 21 | 3 | 18 | 습도·강수·풍속·공간접근성·지형·토지피복 중심 기본 해석 모델 |
+| `INTERPRET_WEATHER_SPACE_CANADA` | 25 | 3 | 22 | 기본 해석 모델에 D-1 캐나다 산불지수 핵심 후보 추가 |
+| `INTERPRET_EDA_INTERACTIONS` | 31 | 3 | 28 | 캐나다 지수 포함 모델에 EDA 기반 제한적 상호작용 추가 |
+
+### 핵심 포함 변수군
+
+- 층화/통제: `기후지형유형`, 월/시간 순환변수
+- 습도/건조: `직전24h_최소습도`, `rh_local_q05`
+- 강수/무강수: `직전48h_강수량합`, `dry_spell_0p1_gt_24h`, `dry_spell_5p0_gt_240h`
+- 풍속/풍향: `wind_max_6h`, `서풍계열_여부`
+- 기압 보조: `기압변동_3h`
+- 공간/접근성: `log1p_도로거리_m`, `log1p_시가화거리_m`, `log1p_산림거리_m`
+- 지형: `고도(m)`, `경사도(도)`, `TPI(지형위치지수)`
+- 토지피복: `토지피복_L1_NAME`, `토지피복_산림유형`
+- 캐나다 산불지수: `D1_FFMC`, `D1_DMC`, `D1_ISI`, `D1_FWI`
+- 상호작용: `영동_x_wind_max_6h`, `rh_local_q05_AND_wind_max_6h_ge_5`, `rh_local_q05_AND_westerly_strong_max_6h`, `시가화_x_도로10m`, `초지_x_dry0p1`, `영동_x_rh_q05_x_wind5`
+
+### 중요한 수정/주의사항
+
+- `비산림_WUI_접경후보`는 해석용 모델에서 제외했다.
+- 이유: 이 학습데이터에서는 Target 1의 `공간층`이 `실제발생위치`로 들어가 있어 `비산림_WUI_접경후보`가 Target 1에서 모두 0으로 계산된다.
+- 따라서 이 변수는 EDA의 WUI 결론과 이름은 비슷하지만, 현재 학습데이터 안에서는 같은 의미의 해석 변수로 사용할 수 없다.
+- `비산림WUI_x_도로10m`, `영서_x_비산림WUI_x_dry0p1`도 같은 이유로 제외했다.
+- 대신 `시가화_x_도로10m`, `초지_x_dry0p1`를 비산림 접경/생활권 대체 프록시로 제한적으로 사용한다.
+- `시점_습도_pct`는 발생 시점 상태 기술값이므로 핵심 해석 모델에서는 제외하고 보조 진단으로만 둔다.
+- D3 임상도 상세 변수는 매칭률이 낮아 핵심 해석 변수셋에서 제외한다.
+- 요인점수 `F1_score`~`F5_score`는 사용하지 않는다.
+
+### 산출물
+
+- `outputs/stage12_interpret_feature_set_summary.md`
+- `outputs/features/stage12_interpret_feature_sets.json`
+- `outputs/tables/stage12_feature_mapping.csv`
+- `outputs/tables/stage12_missing_and_distribution.csv`
+- `outputs/tables/stage12_categorical_levels.csv`
+- `outputs/tables/stage12_interpret_feature_sets_long.csv`
+- `26.06.18_로지스틱_모델링.ipynb` 재현 실행 블록에 `stage12_interpret_feature_set.py` 호출 추가
+
+### 다음 단계
+
+- Step 13으로 진행한다.
+- Step 13에서는 `stage12_interpret_feature_sets.json`의 변수셋을 기준으로 오즈비, 95% 신뢰구간, p-value, FDR q-value를 산출한다.
+- 가능한 경우 날짜 또는 기상셀 기준 cluster-robust 표준오차를 함께 산출한다.
+
+## 2026-06-20 — Step 13 로지스틱 오즈비 및 통계 검정
+
+### 수행 배경
+
+상태: 완료
+
+- Step12에서 확정한 해석용 변수셋을 이용해 로지스틱 GLM을 적합했다.
+- 성능 최고 모델의 ANOVA 선택 계수는 사용하지 않았다.
+- 요인점수는 제외했다.
+- 비통계적 이진분류 모델은 포함하지 않았다.
+- lockbox는 열지 않고 strict development 표본만 사용했다.
+- primary 해석 표준오차는 날짜 기준 cluster-robust SE로 설정했다.
+
+### 작성/실행 파일
+
+- `stage13_logistic_or_inference.py`
+
+### 적합한 해석용 모델
+
+| 모델 | 변수 수 | 적합 목적 |
+|---|---:|---|
+| `INTERPRET_WEATHER_SPACE` | 21 | 날씨·공간·지형·토지피복 기본 해석 |
+| `INTERPRET_WEATHER_SPACE_CANADA` | 25 | 기본 해석 모델에 D-1 캐나다 산불지수 추가 |
+| `INTERPRET_EDA_INTERACTIONS` | 31 | 캐나다 지수 포함 모델에 EDA 기반 상호작용 추가 |
+
+### 표본과 군집
+
+- development 표본: 13,632행
+- Target 1: 1,242건
+- Target 0: 12,390건
+- 양성 비율: 0.0911
+- 날짜 cluster 수: 726
+- 기상셀 cluster 수: 90
+
+### 모델 적합 요약
+
+| 모델 | McFadden R2 | AIC | in-sample AUPRC | in-sample AUROC | Brier |
+|---|---:|---:|---:|---:|---:|
+| `INTERPRET_WEATHER_SPACE` | 0.1427 | 7191.17 | 0.2459 | 0.7778 | 0.07540 |
+| `INTERPRET_WEATHER_SPACE_CANADA` | 0.1617 | 7040.99 | 0.2973 | 0.7916 | 0.07347 |
+| `INTERPRET_EDA_INTERACTIONS` | 0.1636 | 7037.47 | 0.3017 | 0.7926 | 0.07325 |
+
+주의: 위 성능은 development 전체 적합값이므로 Stage11의 OOF 성능표와 비교 목적이 다르다.
+
+### 날짜 cluster 기준 주요 OR 결과
+
+보고서 후보로 볼 수 있는 q<0.05 항목:
+
+| 모델 | 변수 | OR | 95% CI | q-value | 해석 |
+|---|---|---:|---|---:|---|
+| `INTERPRET_WEATHER_SPACE` | `직전24h_최소습도` 5%p 감소 | 1.083 | 1.026~1.143 | 0.0358 | 습도 하강 신호 |
+| `INTERPRET_WEATHER_SPACE` | `dry_spell_5p0_gt_240h` | 1.726 | 1.256~2.371 | 0.0109 | 5mm 이상 비 이후 10일 초과 무강수 |
+| `INTERPRET_WEATHER_SPACE` | `wind_max_6h` 1m/s 증가 | 1.125 | 1.033~1.226 | 0.0483 | 6시간 최대풍속 신호 |
+| `INTERPRET_WEATHER_SPACE` | `log1p_시가화거리_m` 1 증가 | 0.780 | 0.705~0.863 | 0.00004 | 시가화 가까울수록 odds 증가 |
+| `INTERPRET_WEATHER_SPACE_CANADA` | `rh_local_q05` | 2.232 | 1.244~4.004 | 0.0470 | 국지 하위 5% 저습 |
+| `INTERPRET_WEATHER_SPACE_CANADA` | `wind_max_6h` 1m/s 증가 | 1.146 | 1.041~1.261 | 0.0470 | 6시간 최대풍속 |
+| `INTERPRET_WEATHER_SPACE_CANADA` | `log1p_시가화거리_m` 1 증가 | 0.772 | 0.695~0.856 | 0.00003 | 시가화 접근성 |
+| `INTERPRET_EDA_INTERACTIONS` | `기후지형유형=영동 해안형 vs 영서 내륙형` | 0.368 | 0.194~0.697 | 0.0210 | 다른 변수 통제 후 층화 효과 |
+| `INTERPRET_EDA_INTERACTIONS` | `rh_local_q05` | 2.284 | 1.248~4.178 | 0.0480 | 국지 하위 5% 저습 |
+| `INTERPRET_EDA_INTERACTIONS` | `log1p_시가화거리_m` 1 증가 | 0.768 | 0.689~0.855 | 0.00006 | 시가화 접근성 |
+
+### 해석상 주의할 항목
+
+- `토지피복_L1_NAME=미상`은 일부 모델에서 q<0.05로 나타났지만 실제 피복 효과가 아니라 토지피복 매칭 품질/미상 범주의 효과일 가능성이 크므로 최종 해석 변수로 쓰지 않는다.
+- `D1_FWI`는 양의 OR, `D1_ISI`는 음의 OR로 나타났다. 캐나다지수를 동시에 넣은 모델에서는 지수 간 공선성/억제효과가 생길 수 있으므로 Step15에서 반드시 확인해야 한다.
+- 토지피복 범주와 토지피복_산림유형을 동시에 넣으면 일부 범주가 선형종속으로 제거된다.
+- `비산림_WUI_접경후보` 및 그 기반 상호작용은 Step12에서 제외했으므로 Step13에도 사용하지 않았다.
+- OR은 관찰자료의 조건부 연관성이지 인과 효과가 아니다.
+
+### 제거된 선형종속 항
+
+- `INTERPRET_WEATHER_SPACE`: `토지피복_L1_NAME=미상`, `토지피복_L1_NAME=수역`
+- `INTERPRET_WEATHER_SPACE_CANADA`: `토지피복_L1_NAME=미상`, `토지피복_L1_NAME=수역`
+- `INTERPRET_EDA_INTERACTIONS`: `토지피복_L1_NAME=시가화건조지역`, `토지피복_산림유형=미상`
+
+### 산출물
+
+- `outputs/stage13_logistic_or_inference_summary.md`
+- `outputs/tables/stage13_odds_ratios.csv`
+- `outputs/tables/stage13_odds_ratios.md`
+- `outputs/tables/stage13_primary_date_cluster_odds_ratios.csv`
+- `outputs/tables/stage13_significant_terms_q05.csv`
+- `outputs/tables/stage13_report_candidate_terms.csv`
+- `outputs/tables/stage13_model_fit.csv`
+- `outputs/tables/stage13_dropped_terms.csv`
+- `outputs/plots/stage13_or_forestplot.png`
+- `26.06.18_로지스틱_모델링.ipynb` 재현 실행 블록에 `stage13_logistic_or_inference.py` 호출 추가
+
+### 다음 단계
+
+- Step14 변수군 제거 실험으로 진행한다.
+- Step14에서는 날씨, 공간, 캐나다지수, 토지피복, 상호작용 제거 시 성능과 적합도가 어떻게 바뀌는지 확인한다.
+- Step15에서는 특히 캐나다지수 간 공선성, 습도/강수 변수 중복, 토지피복 범주 선형종속을 확인해야 한다.
+
+## 2026-06-20 — Step 14 변수군 제거 실험
+
+### 수행 배경
+
+상태: 완료
+
+- Step12/13의 전체 해석 모델에서 변수군을 하나씩 제거해 성능과 적합도 변화를 확인했다.
+- 예측 성능은 strict outer fold OOF 기준으로 계산했다.
+- 통계 적합도와 likelihood ratio test는 development 전체 GLM 적합 기준으로 계산했다.
+- lockbox는 사용하지 않았다.
+- 요인점수와 비통계적 이진분류 모델은 사용하지 않았다.
+
+### 작성/실행 파일
+
+- `stage14_ablation_tests.py`
+
+### 기준 모델
+
+`FULL_INTERPRET_EDA_INTERACTIONS`
+
+- OOF AUPRC: 0.2153
+- OOF ROC AUC: 0.6033
+- OOF Brier: 0.08045
+- OOF log loss: 0.79398
+- OOF best-F1: 0.2846
+
+단, 전체 모델에서 토지피복 범주를 제거한 `DROP_LANDCOVER`가 OOF에서 훨씬 안정적이었다. 따라서 `DROP_LANDCOVER`를 안정 기준모델로도 별도 비교했다.
+
+`DROP_LANDCOVER`
+
+- OOF AUPRC: 0.2867
+- OOF ROC AUC: 0.7845
+- OOF Brier: 0.07399
+- OOF log loss: 0.25914
+- OOF best-F1: 0.3344
+
+### 변수군 제거 설계
+
+| 모델 | 제거 변수군 | 기준 |
+|---|---|---|
+| `DROP_WEATHER` | 습도·강수·풍속·기압 및 날씨 기반 상호작용 | 전체 모델 기준 |
+| `DROP_SPACE` | 공간접근성·지형 및 공간 기반 상호작용 | 전체 모델 기준 |
+| `DROP_CANADA` | D-1 캐나다 산불지수 | 전체 모델 기준 |
+| `DROP_LANDCOVER` | 토지피복 범주 및 토지피복 기반 상호작용 | 전체 모델 기준, 안정 기준모델 |
+| `DROP_INTERACTIONS` | EDA 기반 상호작용 | 전체 모델 기준 |
+| `DROP_TOPOGRAPHY` | 고도·경사도·TPI | 전체 모델 기준 |
+| `STABLE_DROP_WEATHER` | 토지피복 제거 후 날씨 변수군 제거 | 안정 기준모델 기준 |
+| `STABLE_DROP_SPACE` | 토지피복 제거 후 공간·지형 변수군 제거 | 안정 기준모델 기준 |
+| `STABLE_DROP_CANADA` | 토지피복 제거 후 캐나다지수 제거 | 안정 기준모델 기준 |
+| `STABLE_DROP_INTERACTIONS` | 토지피복 제거 후 상호작용 제거 | 안정 기준모델 기준 |
+| `STABLE_DROP_TOPOGRAPHY` | 토지피복 제거 후 지형 제거 | 안정 기준모델 기준 |
+
+### 전체 모델 기준 OOF 결과
+
+| 모델 | AUPRC | ΔAUPRC vs full | AUROC | Brier | ΔBrier vs full | best-F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| `DROP_WEATHER` | 0.1757 | -0.0397 | 0.5909 | 0.08221 | +0.00176 | 0.2619 |
+| `DROP_CANADA` | 0.1778 | -0.0375 | 0.7000 | 0.08632 | +0.00587 | 0.2665 |
+| `DROP_SPACE` | 0.2078 | -0.0076 | 0.5969 | 0.08089 | +0.00044 | 0.2761 |
+| `DROP_INTERACTIONS` | 0.2147 | -0.0006 | 0.6003 | 0.08049 | +0.00004 | 0.2887 |
+| `DROP_TOPOGRAPHY` | 0.2152 | -0.0001 | 0.6030 | 0.08045 | +0.00000 | 0.2870 |
+| `FULL_INTERPRET_EDA_INTERACTIONS` | 0.2153 | 0.0000 | 0.6033 | 0.08045 | 0.00000 | 0.2846 |
+| `DROP_LANDCOVER` | 0.2867 | +0.0714 | 0.7845 | 0.07399 | -0.00646 | 0.3344 |
+
+### 토지피복 제거 안정 기준 OOF 결과
+
+| 모델 | AUPRC | ΔAUPRC vs stable | AUROC | Brier | ΔBrier vs stable | best-F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| `STABLE_DROP_WEATHER` | 0.2158 | -0.0710 | 0.7585 | 0.07717 | +0.00318 | 0.2964 |
+| `STABLE_DROP_CANADA` | 0.2407 | -0.0460 | 0.7726 | 0.07584 | +0.00185 | 0.3042 |
+| `STABLE_DROP_SPACE` | 0.2521 | -0.0347 | 0.7148 | 0.07682 | +0.00283 | 0.2682 |
+| `STABLE_DROP_INTERACTIONS` | 0.2853 | -0.0014 | 0.7844 | 0.07408 | +0.00009 | 0.3320 |
+| `DROP_LANDCOVER` | 0.2867 | 0.0000 | 0.7845 | 0.07399 | 0.00000 | 0.3344 |
+| `STABLE_DROP_TOPOGRAPHY` | 0.2870 | +0.0002 | 0.7834 | 0.07401 | +0.00002 | 0.3340 |
+
+### Likelihood ratio test 요약
+
+- 전체 모델 기준 LRT에서는 날씨, 캐나다지수, 공간, 토지피복, 상호작용, 지형 제거가 모두 통계적으로 적합도를 낮췄다.
+- 안정 기준모델 `DROP_LANDCOVER` 기준에서도 공간·지형 제거, 날씨 제거, 캐나다지수 제거의 LRT p-value가 매우 작았다.
+- 다만 LRT는 development 전체 적합도 기준이고, OOF 성능은 일반화 기준이다. 두 기준은 반드시 구분해서 해석한다.
+
+### 핵심 해석
+
+- 전체 모델에서는 `DROP_LANDCOVER`가 오히려 AUPRC를 +0.0714 높이고 Brier를 -0.00646 낮췄다.
+- 이는 토지피복 세부 범주가 unregularized GLM에서 OOF 일반화를 불안정하게 만든다는 신호이다.
+- 최종 해석 모델은 토지피복 범주를 그대로 넣은 전체 모델보다, 토지피복을 제거하거나 더 큰 범주로 축약한 안정 모델을 우선 검토해야 한다.
+- 토지피복 제거 안정 기준에서는 날씨 변수군 제거가 가장 큰 성능 하락을 만들었다.
+  - AUPRC -0.0710
+  - Brier +0.00318
+- 캐나다지수 제거도 성능을 낮췄다.
+  - AUPRC -0.0460
+  - Brier +0.00185
+- 공간·지형 제거는 AUROC와 F1에 큰 영향을 줬다.
+  - AUROC -0.0697
+  - F1 -0.0662
+- EDA 기반 상호작용과 지형만 제거하는 경우 성능 변화는 작았다.
+- 따라서 현재 로지스틱 해석의 우선순위는 날씨/건조도, 캐나다지수, 공간접근성이고, 토지피복 세부 범주는 Step15에서 안정성 점검 후 축약 여부를 결정해야 한다.
+
+### 산출물
+
+- `outputs/stage14_ablation_tests_summary.md`
+- `outputs/tables/stage14_ablation_design.csv`
+- `outputs/tables/stage14_ablation_metrics.csv`
+- `outputs/tables/stage14_ablation_fold_metrics.csv`
+- `outputs/tables/stage14_ablation_glm_fit.csv`
+- `outputs/tables/stage14_likelihood_ratio_tests.csv`
+- `outputs/tables/stage14_ablation_dropped_terms.csv`
+- `outputs/predictions/stage14_ablation_oof_predictions.csv`
+- `outputs/plots/stage14_ablation_auprc.png`
+- `outputs/plots/stage14_ablation_brier.png`
+- `26.06.18_로지스틱_모델링.ipynb` 재현 실행 블록에 `stage14_ablation_tests.py` 호출 추가
+
+### 다음 단계
+
+- Step15로 진행한다.
+- Step15에서는 캐나다지수 간 공선성, 습도/강수 변수 중복, 토지피복 범주 선형종속 및 희소범주 문제를 확인한다.
+- 특히 `D1_FWI`와 `D1_ISI` 부호 역전, 토지피복 범주 투입 시 OOF 성능 악화를 우선 점검한다.
+
+## 2026-06-20 — Step 15 공선성·희소범주·비선형성 진단
+
+### 수행 배경
+
+상태: 완료
+
+- Step13에서 나타난 캐나다지수 부호 역전 가능성을 확인했다.
+- Step14에서 확인된 토지피복 범주 투입 시 OOF 성능 악화를 진단했다.
+- 습도·강수·풍속·공간 변수의 중복성과 비선형성을 점검했다.
+- lockbox는 사용하지 않고 strict development 표본만 사용했다.
+- 요인점수와 비통계적 이진분류 모델은 사용하지 않았다.
+
+### 작성/실행 파일
+
+- `stage15_collinearity_nonlinearity.py`
+
+### 입력과 기준
+
+- development 표본: 13,632행
+- Target 1: 1,242건
+- Target 0: 12,390건
+- VIF 기준 변수셋: Step14의 토지피복 제거 안정 모델
+- 토지피복 진단 기준: `토지피복_L1_NAME`, `토지피복_산림유형`, `토지피복_L2_NAME`
+- 비선형성 진단 변수:
+  - `직전24h_최소습도`
+  - `도로_최단거리_m`
+  - `wind_max_6h`
+  - `D1_FWI`
+  - `D1_ISI`
+  - `D1_FFMC`
+
+### 고상관 변수쌍
+
+- |Spearman| >= 0.80 또는 |Pearson| >= 0.80인 변수쌍: 15개
+- 주요 고상관 쌍:
+
+| 변수 1 | 변수 2 | Spearman | 해석 |
+|---|---|---:|---|
+| `D1_DMC` | `D1_BUI` | 0.9825 | 캐나다 누적건조 지수 중복 |
+| `D1_FFMC` | `D1_ISI` | 0.9533 | ISI가 FFMC와 강하게 연결 |
+| `wind_max_6h` | `wind_mean_6h` | 0.9499 | 풍속 요약변수 중복 |
+| `D1_ISI` | `D1_FWI` | 0.9364 | FWI와 ISI 중복 |
+| `D1_FFMC` | `D1_FWI` | 0.9140 | FWI와 FFMC 중복 |
+| `dry_spell_0p1_gt_24h` | `직전24h_강수량합` | -0.8895 | 무강수 조건과 단기 강수량 중복 |
+| `log1p_도로거리_m` | `log1p_시가화거리_m` | 0.8836 | 도로·시가화 접근성 중복 |
+| `직전24h_최소습도` | `D-1_최소습도_pct` | 0.8824 | 습도 시간창 중복 |
+
+### VIF 진단
+
+- VIF >= 5 항 수: 6
+- VIF >= 10 항 수: 2
+
+상위 VIF:
+
+| 변수 | VIF | 판단 |
+|---|---:|---|
+| `D1_FWI` | 22.616 | 매우 높은 공선성 |
+| `D1_ISI` | 12.417 | 매우 높은 공선성 |
+| `D1_DMC` | 7.715 | 높은 공선성 |
+| `영동_x_wind_max_6h` | 7.148 | 영동 더미/풍속과 중복 |
+| `log1p_도로거리_m` | 6.638 | 시가화거리와 중복 |
+| `기후지형유형=영동 해안형` | 6.024 | 영동 상호작용과 중복 |
+
+### 캐나다지수 판단
+
+- `D1_FWI`, `D1_ISI`, `D1_FFMC`, `D1_DMC`, `D1_BUI`는 서로 강하게 묶인다.
+- Step13에서 `D1_FWI`는 양의 OR, `D1_ISI`는 음의 OR로 나타났는데, 이는 독립적인 물리 효과라기보다 공선성/억제효과 가능성이 크다.
+- 최종 해석 모델에서는 캐나다지수 전체를 동시에 넣기보다 대표 지수를 1~2개로 줄이는 것이 안전하다.
+- 후보:
+  - 종합지수 중심: `D1_FWI` 단독
+  - 물리 분해 중심: `D1_FFMC` + `D1_DMC` 또는 `D1_FFMC` + `D1_FWI`
+- Step16에서 축소 모델을 만들 때 이 판단을 반영한다.
+
+### 토지피복 범주 진단
+
+- 희소 또는 quasi-separation 후보 범주 수: 10개
+- 특히 `토지피복_L2_NAME`의 공업지역, 기타재배지, 교통지역, 문화·체육·휴양지역, 내륙수, 과수원, 자연초지 등은 표본 또는 Target 1 수가 작다.
+- `토지피복_L1_NAME=수역`도 n=30, Target 1=5로 매우 작다.
+- Step13/14에서 토지피복 범주가 선형종속 또는 OOF 성능 악화를 만든 이유와 일관된다.
+
+판단:
+
+- 토지피복 세부 범주는 unregularized GLM에 그대로 넣기 어렵다.
+- 최종 해석 모델에서는 토지피복을 제거하거나, 다음처럼 더 단순한 플래그로 축약하는 것이 안전하다.
+  - 산림지역 여부
+  - 시가화건조지역 여부
+  - 초지 여부
+  - 도로/시가화 초접경 여부
+  - 미상/희소범주는 별도 해석하지 않음
+
+### 주요 변수 bin 효과
+
+| 변수 | 위험 방향 패턴 |
+|---|---|
+| `직전24h_최소습도` | <=20% bin의 Target 1 rate가 0.1895로 전체 평균 대비 lift 2.08 |
+| `도로_최단거리_m` | <=10m bin의 Target 1 rate 0.1463, >100m bin은 0.0227 |
+| `wind_max_6h` | 3m/s 이상부터 Target 1 rate가 상승, >5m/s bin은 0.1258 |
+| `D1_FWI` | 20 초과 bin의 Target 1 rate 0.1845, lift 2.03 |
+| `D1_ISI` | 10 초과 bin의 Target 1 rate 0.2205, lift 2.42 |
+| `D1_FFMC` | 90 초과 bin의 Target 1 rate 0.1685, lift 1.85 |
+
+판단:
+
+- 습도, 도로거리, FWI/ISI/FFMC는 단순 선형 효과만으로 설명하기보다 고위험 구간이 뚜렷하다.
+- 다만 최종 보고서에서는 선형 OR을 기본으로 두고, bin 효과는 임계구간 후보 설명에 사용한다.
+
+### 최종 판단
+
+- 캐나다지수는 강한 공선성 때문에 전체 지수를 동시에 넣은 OR을 그대로 해석하지 않는다.
+- 토지피복 세부 범주는 희소범주와 선형종속 위험이 있어 최종 해석 모델에서 제거하거나 단순 플래그로 축약한다.
+- 습도/강수 변수도 중복이 있으므로 대표 변수 중심으로 줄인다.
+- 공간 접근성에서는 도로거리와 시가화거리가 강하게 중복되므로 둘을 동시에 해석할 때 주의한다.
+- Step16에서는 축소·안정 로지스틱 모델을 만들어 최종 보고서용 OR 표를 다시 산출하는 것이 적절하다.
+
+### 산출물
+
+- `outputs/stage15_collinearity_nonlinearity_summary.md`
+- `outputs/tables/stage15_correlations.csv`
+- `outputs/tables/stage15_high_correlations.csv`
+- `outputs/tables/stage15_vif.csv`
+- `outputs/tables/stage15_vif_dropped_terms.csv`
+- `outputs/tables/stage15_landcover_category_diagnostics.csv`
+- `outputs/tables/stage15_landcover_dependency_crosstab.csv`
+- `outputs/tables/stage15_binned_effects.csv`
+- `outputs/plots/stage15_corr_heatmap.png`
+- `outputs/plots/stage15_vif_bar.png`
+- `outputs/plots/stage15_binned_humidity.png`
+- `outputs/plots/stage15_binned_road_distance.png`
+- `outputs/plots/stage15_binned_wind.png`
+- `outputs/plots/stage15_binned_fwi.png`
+- `outputs/plots/stage15_binned_isi.png`
+- `outputs/plots/stage15_binned_ffmc.png`
+- `26.06.18_로지스틱_모델링.ipynb` 재현 실행 블록에 `stage15_collinearity_nonlinearity.py` 호출 추가
+
+### 다음 단계
+
+- Step16으로 진행한다.
+- Step16은 무리한 확장 모델이 아니라, Step13~15 결과를 반영한 “최종 축소·안정 해석 모델”을 만드는 단계로 잡는다.
+- 우선 검토할 축소 모델:
+  1. `FINAL_REDUCED_WEATHER_SPACE`: 날씨·공간 핵심 변수만 사용
+  2. `FINAL_REDUCED_WITH_FWI`: 위 모델 + `D1_FWI`
+  3. `FINAL_REDUCED_WITH_FFMC_FWI`: 위 모델 + `D1_FFMC` + `D1_FWI`
+  4. `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS`: 토지피복 세부범주 대신 단순 플래그만 사용
+- 최종 산출물은 보고서용 OR 표와 OOF 성능표를 같이 제공한다.
+
+## 2026-06-20 Step16 최종 축소·안정 로지스틱 모델 완료
+
+### 목적
+
+- Step13~15에서 확인한 공선성, 희소 토지피복 범주, 캐나다지수 중복 문제를 반영해 최종 보고서용 해석 모델을 다시 만들었다.
+- 이 단계의 목적은 성능을 무리하게 최대화하는 것이 아니라, 다음 조건을 만족하는 방어 가능한 로지스틱 모델을 확정하는 것이다.
+  - strict outer fold OOF 성능 산출
+  - 날짜 cluster-robust 표준오차 기반 OR 산출
+  - VIF 기준 공선성 관리
+  - EDA 결론과 직접 연결 가능한 변수 중심 구성
+  - 머신러닝 모델과 비교 가능한 성능지표 산출
+
+### 실행 파일
+
+- `jsw/Analysis/logistic/stage16_final_reduced_logistic.py`
+
+### 후보 모델
+
+| 모델 | 변수 수 | 캐나다지수 사용 | 토지피복 사용 | 목적 |
+|---|---:|---|---|---|
+| `FINAL_REDUCED_WEATHER_SPACE` | 13 | 없음 | 없음 | 날씨·건조도·도로접근성 중심 최소 해석 모델 |
+| `FINAL_REDUCED_WITH_FWI` | 14 | `D1_FWI` 단독 | 없음 | 최소 모델에 종합 캐나다지수 1개만 추가 |
+| `FINAL_REDUCED_WITH_FFMC_FWI` | 15 | `D1_FFMC`, `D1_FWI` | 없음 | FFMC와 FWI를 함께 넣은 비교 모델 |
+| `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS` | 19 | `D1_FWI` 단독 | 단순 이진 플래그 | 세부 토지피복 대신 산림/시가화/초지/도로접경 플래그만 사용 |
+
+### 최종 추천 모델
+
+- 추천 모델: `FINAL_REDUCED_WITH_FWI`
+- 이유:
+  - OOF AUPRC는 단순 토지피복 플래그 모델이 0.2600으로 아주 조금 높다.
+  - 그러나 단순 토지피복 플래그 모델은 `시가화_x_도로10m`, `토지피복_시가화건조지역`의 VIF가 50 이상으로 매우 높다.
+  - `FINAL_REDUCED_WITH_FWI`는 AUPRC 0.2590으로 거의 같으면서 max VIF가 2.27이라 해석 안정성이 훨씬 높다.
+  - 따라서 최종 보고서에서는 `FINAL_REDUCED_WITH_FWI`를 해석용 대표 로지스틱 모델로 사용한다.
+
+### OOF 성능 비교
+
+| 모델 | AUPRC | ROC AUC | Brier | Log loss | Best-F1 | Precision | Recall | Accuracy | max VIF | 판단 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `FINAL_REDUCED_WITH_SIMPLE_LANDCOVER_FLAGS` | 0.2600 | 0.7652 | 0.07566 | 0.26473 | 0.3007 | 0.2200 | 0.4750 | 0.7987 | 50.62 | 성능은 근소하게 최고지만 공선성 때문에 해석 부적합 |
+| `FINAL_REDUCED_WITH_FWI` | 0.2590 | 0.7569 | 0.07585 | 0.26715 | 0.3015 | 0.2142 | 0.5089 | 0.7852 | 2.27 | 최종 해석용 추천 |
+| `FINAL_REDUCED_WITH_FFMC_FWI` | 0.2580 | 0.7572 | 0.07588 | 0.26714 | 0.3019 | 0.2149 | 0.5072 | 0.7862 | 2.27 | FWI 단독 대비 성능 개선 없음 |
+| `FINAL_REDUCED_WEATHER_SPACE` | 0.2387 | 0.7533 | 0.07631 | 0.26863 | 0.2962 | 0.2249 | 0.4340 | 0.8121 | 2.27 | 캐나다지수 제외 시 AUPRC 하락 |
+
+비교 기준:
+
+- Stage11 대표 성능 모델 `PLUS_LANDCOVER_RULES_ANOVA`
+  - AUPRC 0.2398
+  - ROC AUC 0.7768
+  - Brier 0.07697
+  - F1 0.3047
+- Step16 추천 모델 `FINAL_REDUCED_WITH_FWI`
+  - AUPRC는 Stage11 대표 성능 모델보다 높다.
+  - ROC AUC는 Stage11보다 낮다.
+  - Brier는 Stage11보다 약간 좋다.
+  - F1은 Stage11과 비슷하다.
+- 결론:
+  - Stage11은 성능 비교용 대표 모델로 남길 수 있다.
+  - Step16은 보고서 해석용 최종 모델로 쓰는 것이 적절하다.
+
+### 추천 모델 날짜 cluster 기준 주요 OR
+
+| 변수 | OR 단위 | OR | 95% CI | q-value | 해석 |
+|---|---|---:|---|---:|---|
+| `log1p_도로거리_m` | log1p 거리 1 증가 | 0.758 | 0.723~0.794 | 0.0000 | 도로에서 멀수록 산불 odds 감소 |
+| `고도(m)` | 100m 증가 | 0.900 | 0.849~0.955 | 0.0032 | 같은 모델 조건에서 고도가 높을수록 odds 감소 |
+| `기후지형유형=영동 해안형` | 영서 내륙형 대비 | 0.584 | 0.427~0.800 | 0.0032 | 다른 변수 통제 후에는 영동 더미 자체는 낮은 방향 |
+| `직전24h_최소습도` | 5%p 감소 | 1.074 | 1.030~1.119 | 0.0032 | 직전 24시간 최소습도 하강은 안정적인 양의 신호 |
+| `dry_spell_5p0_gt_240h` | 조건 충족 | 1.667 | 1.198~2.319 | 0.0073 | 5mm 이상 강수 후 10일 이상 경과는 양의 신호 |
+| `rh_local_q05` | 조건 충족 | 2.477 | 1.290~4.758 | 0.0161 | 국지 하위 5% 저습 조건은 강한 양의 신호 |
+| `D1_FWI` | 5점 증가 | 1.155 | 1.038~1.285 | 0.0172 | 캐나다 FWI 상승은 독립 양의 신호 |
+| `기압변동_3h` | 1hPa 하강 | 1.179 | 1.029~1.351 | 0.0327 | 단기 기압 하강은 보조 양의 신호 |
+| `wind_max_6h` | 1m/s 증가 | 1.113 | 1.012~1.223 | 0.0461 | 직전 6시간 최대풍속 상승은 약하지만 유의한 양의 신호 |
+
+비유의 변수:
+
+- `서풍계열_여부`: OR 1.080, q=0.5066
+- `기후지형유형=고지·산간형`: OR 1.186, q=0.5066
+
+해석 주의:
+
+- 영동 해안형 더미 OR이 1보다 작다고 해서 영동이 안전하다는 뜻은 아니다.
+- 이 모델은 도로거리, 고도, 습도, FWI, 풍속 등을 함께 넣은 조건부 모델이다.
+- EDA에서는 영동 해안형에서 서풍계열 강풍·저습 조합이 중요했고, Step16에서는 그 효과가 `wind_max_6h`, `rh_local_q05`, `D1_FWI` 등으로 일부 흡수된다.
+
+### EDA와 연결되는 결론
+
+- 습도:
+  - EDA의 핵심 결론이었던 직전 24~48시간 저습과 국지 상대건조가 로지스틱에서도 유지됐다.
+  - `직전24h_최소습도`와 `rh_local_q05`가 모두 q<0.05로 남았다.
+- 강수/무강수:
+  - EDA에서 강수량 자체보다 무강수 지속이 중요하다고 봤고, Step16에서도 `dry_spell_5p0_gt_240h`가 유의했다.
+- 바람:
+  - 전체 평균에서는 바람이 습도보다 약했지만, Step16에서는 `wind_max_6h`가 약한 양의 신호로 남았다.
+  - 서풍계열 단독은 유의하지 않으므로, 최종 보고서에서는 “서풍 자체”보다 “저습·풍속·영동 조건의 결합”을 EDA 중심으로 설명해야 한다.
+- 공간:
+  - 도로 초접경성이 강하다는 EDA 결론이 `log1p_도로거리_m` OR로 유지됐다.
+  - 도로에서 멀어질수록 산불 odds가 뚜렷하게 낮아진다.
+- 캐나다지수:
+  - 전체 캐나다지수를 모두 넣으면 공선성 문제가 커진다.
+  - `D1_FWI` 단독은 안정적으로 양의 신호를 보여, 최종 보고서에서 보조 종합지수로 사용할 수 있다.
+
+### 산출물
+
+- `outputs/stage16_final_reduced_logistic_summary.md`
+- `outputs/tables/stage16_final_model_design.csv`
+- `outputs/tables/stage16_final_model_metrics.csv`
+- `outputs/tables/stage16_final_fold_metrics.csv`
+- `outputs/predictions/stage16_final_oof_predictions.csv`
+- `outputs/tables/stage16_final_or_date_cluster.csv`
+- `outputs/tables/stage16_final_report_or_table.csv`
+- `outputs/tables/stage16_final_glm_fit.csv`
+- `outputs/tables/stage16_final_vif.csv`
+- `outputs/tables/stage16_final_dropped_terms.csv`
+- `outputs/plots/stage16_final_model_metrics.png`
+- `outputs/plots/stage16_final_or_forestplot.png`
+
+### 다음 단계
+
+- Step17로 진행한다.
+- Step17의 목적은 새 모델을 계속 추가하는 것이 아니라, 지금까지 나온 로지스틱 결과를 최종 보고서용으로 정리하는 것이다.
+- Step17에서 할 일:
+  1. Stage11 성능 기준 모델과 Stage16 해석 기준 모델을 명확히 분리한다.
+  2. 머신러닝 모델과 비교할 성능표에는 AUPRC, ROC AUC, Brier, log loss, F1, precision, recall, accuracy, balanced accuracy를 모두 넣는다.
+  3. 최종 보고서용 로지스틱 해석표에는 Step16 추천 모델의 OR, 95% CI, q-value를 사용한다.
+  4. EDA 문장과 로지스틱 결과를 연결하는 해석 문단을 작성한다.
+  5. “로지스틱으로 가능한 결론”과 “로지스틱으로는 어려운 한계”를 분리한다.
