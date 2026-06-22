@@ -1073,6 +1073,68 @@ def write_csv(path: Path, rows: list[dict[str, Any]] | pd.DataFrame) -> None:
     frame.to_csv(path, index=False, encoding="utf-8-sig")
 
 
+def load_existing_rows(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    frame = pd.read_csv(path, encoding="utf-8-sig", low_memory=False)
+    return frame.to_dict(orient="records")
+
+
+def replace_candidate_rows(
+    rows: list[dict[str, Any]],
+    candidate_id: str,
+    replacement_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    retained = [row for row in rows if str(row.get("candidate_id", "")) != candidate_id]
+    retained.extend(replacement_rows)
+    return retained
+
+
+def completed_candidate_artifacts(
+    output_dir: Path,
+    candidate_id: str,
+    *,
+    expected_n: int,
+    expected_outer_folds: int,
+) -> bool:
+    required_paths = [
+        output_dir / f"oof__{candidate_id}.csv",
+        output_dir / f"optuna_trials__{candidate_id}.csv",
+        output_dir / f"selected_params__{candidate_id}.json",
+    ]
+    if not all(path.exists() for path in required_paths):
+        return False
+
+    validation_path = output_dir / "validation_checks__step2_tuned_candidates.csv"
+    if not validation_path.exists():
+        return False
+    validation = pd.read_csv(validation_path, encoding="utf-8-sig", low_memory=False)
+    matched = validation.loc[
+        (validation["candidate_id"].astype(str) == candidate_id)
+        & (validation["status"].astype(str) == "OK")
+    ]
+    if matched.empty:
+        return False
+    validation_row = matched.iloc[-1]
+    if int(validation_row["prediction_n"]) != expected_n:
+        return False
+    if int(validation_row["missing_prediction_n"]) != 0:
+        return False
+    if int(validation_row["duplicate_sample_id_n"]) != 0:
+        return False
+    if int(validation_row["nan_probability_n"]) != 0 or int(validation_row["inf_probability_n"]) != 0:
+        return False
+
+    try:
+        params_payload = json.loads(
+            (output_dir / f"selected_params__{candidate_id}.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return False
+    selected_by_fold = params_payload.get("selected_params_by_outer_fold", {})
+    return len(selected_by_fold) == expected_outer_folds
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1288,6 +1350,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outer-splits", type=int, default=5, help="Step1 manifest가 없을 때 생성할 outer split 수")
     parser.add_argument("--inner-splits", type=int, default=4, help="outer-train 내부 inner CV 수")
     parser.add_argument("--max-outer-folds", type=int, default=0, help="디버그용 outer fold 제한. 0이면 전체")
+    parser.add_argument(
+        "--resume-existing",
+        action="store_true",
+        help="기존 통합 결과를 유지하고 완료 산출물이 있는 후보는 건너뜀",
+    )
     parser.add_argument("--check-config", action="store_true", help="데이터/후보/의존성만 점검하고 튜닝하지 않음")
     parser.add_argument("--no-progress-bar", action="store_true", help="tqdm 막대바를 사용하지 않음")
     parser.add_argument("--random-state", type=int, default=20260622, help="분할, Optuna, 모델 seed")
@@ -1370,6 +1437,7 @@ def main() -> None:
         "outer_fold_count": len(outer_splits),
         "inner_splits": args.inner_splits,
         "max_outer_folds": args.max_outer_folds,
+        "resume_existing": bool(args.resume_existing),
         "random_state": args.random_state,
         "n_jobs": args.n_jobs,
         "progress_bar": bool((not args.no_progress_bar) and tqdm is not None),
@@ -1400,12 +1468,29 @@ def main() -> None:
         log("--check-config 지정: 튜닝 없이 종료합니다.")
         return
 
-    summary_rows: list[dict[str, Any]] = []
-    fold_rows: list[dict[str, Any]] = []
-    threshold_rows: list[dict[str, Any]] = []
-    subgroup_rows: list[dict[str, Any]] = []
-    top_risk_rows: list[dict[str, Any]] = []
-    validation_rows: list[dict[str, Any]] = []
+    aggregate_paths = {
+        "summary": output_dir / "summary__step2_tuned_candidates.csv",
+        "fold": output_dir / "fold_metrics__step2_tuned_candidates.csv",
+        "threshold": output_dir / "threshold_metrics__step2_tuned_candidates.csv",
+        "subgroup": output_dir / "subgroup_metrics__step2_tuned_candidates.csv",
+        "top_risk": output_dir / "top_risk_metrics__step2_tuned_candidates.csv",
+        "validation": output_dir / "validation_checks__step2_tuned_candidates.csv",
+    }
+    if args.resume_existing:
+        summary_rows = load_existing_rows(aggregate_paths["summary"])
+        fold_rows = load_existing_rows(aggregate_paths["fold"])
+        threshold_rows = load_existing_rows(aggregate_paths["threshold"])
+        subgroup_rows = load_existing_rows(aggregate_paths["subgroup"])
+        top_risk_rows = load_existing_rows(aggregate_paths["top_risk"])
+        validation_rows = load_existing_rows(aggregate_paths["validation"])
+        log(f"기존 Step2 결과 로드: completed_summary_rows={len(summary_rows)}")
+    else:
+        summary_rows = []
+        fold_rows = []
+        threshold_rows = []
+        subgroup_rows = []
+        top_risk_rows = []
+        validation_rows = []
 
     candidate_bar = None
     if (not args.no_progress_bar) and tqdm is not None:
@@ -1413,6 +1498,19 @@ def main() -> None:
 
     try:
         for candidate in selected_candidates:
+            expected_n = sum(len(valid_idx) for _, _, valid_idx in outer_splits)
+            if args.resume_existing and completed_candidate_artifacts(
+                output_dir,
+                candidate.candidate_id,
+                expected_n=expected_n,
+                expected_outer_folds=len(outer_splits),
+            ):
+                log(f"CANDIDATE SKIP {candidate.candidate_id} | completed artifacts already exist")
+                if candidate_bar is not None:
+                    candidate_bar.update(1)
+                    candidate_bar.set_postfix({"skip": candidate.candidate_id}, refresh=False)
+                continue
+
             candidate_start = time.perf_counter()
             feature_spec = feature_sets[candidate.feature_set]
             available, dependency_error = model_available(candidate.model_name)
@@ -1427,7 +1525,7 @@ def main() -> None:
                 result = failed_candidate_result(
                     candidate,
                     feature_spec,
-                    expected_n=sum(len(valid_idx) for _, _, valid_idx in outer_splits),
+                    expected_n=expected_n,
                     error=f"dependency_missing: {dependency_error}",
                     elapsed_seconds=time.perf_counter() - candidate_start,
                 )
@@ -1449,25 +1547,29 @@ def main() -> None:
                     result = failed_candidate_result(
                         candidate,
                         feature_spec,
-                        expected_n=sum(len(valid_idx) for _, _, valid_idx in outer_splits),
+                        expected_n=expected_n,
                         error=repr(exc),
                         elapsed_seconds=time.perf_counter() - candidate_start,
                     )
                     log(f"CANDIDATE FAIL {candidate.candidate_id} | error={repr(exc)}")
 
-            summary_rows.append(result["summary_row"])
-            fold_rows.extend(result["fold_rows"])
-            threshold_rows.extend(result["threshold_rows"])
-            subgroup_rows.extend(result["subgroup_rows"])
-            top_risk_rows.extend(result["top_risk_rows"])
-            validation_rows.append(result["validation_row"])
+            summary_rows = replace_candidate_rows(summary_rows, candidate.candidate_id, [result["summary_row"]])
+            fold_rows = replace_candidate_rows(fold_rows, candidate.candidate_id, result["fold_rows"])
+            threshold_rows = replace_candidate_rows(threshold_rows, candidate.candidate_id, result["threshold_rows"])
+            subgroup_rows = replace_candidate_rows(subgroup_rows, candidate.candidate_id, result["subgroup_rows"])
+            top_risk_rows = replace_candidate_rows(top_risk_rows, candidate.candidate_id, result["top_risk_rows"])
+            validation_rows = replace_candidate_rows(
+                validation_rows,
+                candidate.candidate_id,
+                [result["validation_row"]],
+            )
 
-            write_csv(output_dir / "summary__step2_tuned_candidates.csv", summary_rows)
-            write_csv(output_dir / "fold_metrics__step2_tuned_candidates.csv", fold_rows)
-            write_csv(output_dir / "threshold_metrics__step2_tuned_candidates.csv", threshold_rows)
-            write_csv(output_dir / "subgroup_metrics__step2_tuned_candidates.csv", subgroup_rows)
-            write_csv(output_dir / "top_risk_metrics__step2_tuned_candidates.csv", top_risk_rows)
-            write_csv(output_dir / "validation_checks__step2_tuned_candidates.csv", validation_rows)
+            write_csv(aggregate_paths["summary"], summary_rows)
+            write_csv(aggregate_paths["fold"], fold_rows)
+            write_csv(aggregate_paths["threshold"], threshold_rows)
+            write_csv(aggregate_paths["subgroup"], subgroup_rows)
+            write_csv(aggregate_paths["top_risk"], top_risk_rows)
+            write_csv(aggregate_paths["validation"], validation_rows)
 
             elapsed = time.perf_counter() - candidate_start
             log(f"CANDIDATE DONE {candidate.candidate_id} | elapsed={format_seconds(elapsed)} | status={result['summary_row']['status']}")
