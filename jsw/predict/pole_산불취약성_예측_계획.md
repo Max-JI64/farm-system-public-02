@@ -475,11 +475,29 @@ jsw/predict/outputs/deployment_lgbm__five_param_ensemble.joblib
 best_f2 threshold = 0.0199793962581399
 ```
 
-단, 이 threshold는 Pole별 최종 등급을 직접 나누는 절대 위험 기준이 아니라 `f2_threshold_exceed_rate` 계산용 보조 기준이다. Pole별 최종 주 순위는 `p95_score`를 사용한다.
+이 threshold는 실제 산불 발생확률 1.9979%를 의미하지 않는다. 최종 LightGBM raw risk score에서 F2가 최대가 된 운영 기준이다.
+
+Pole 적용에서는 threshold의 역할을 다음처럼 분리한다.
+
+| 용도 | 기준 | 의미 |
+| --- | --- | --- |
+| 제출용 `decision` | `p95_score >= 0.0199793962581399` | 해당 Pole의 고위험 시간대 대표 score가 F2 운영 기준 이상이면 1 |
+| 반복 고위험 보조지표 | `f2_threshold_exceed_rate` | 해당 Pole의 전체 시간 row 중 threshold 이상이었던 비율 |
+| 점검예산용 우선순위 | `p95_score` 순위 및 top 5/10/20% | 전체 Pole 중 상대적으로 먼저 점검할 후보군 |
+
+따라서 threshold는 시간 row의 고위험 여부와 제출용 binary decision에는 사용하지만, `top 5%` 같은 고정 비율을 위험 Pole의 절대 정의로 사용하지 않는다.
 
 ### 7-2. score 산출
 
 각 chunk별로 최종 LightGBM 58개 피처를 모델에 넣어 score를 계산한다. 하지만 전체 `Pole × 기준시각` row를 CSV로 저장하지 않는다.
+
+중요한 점은 다음이다.
+
+- 04번 실행 중에는 내부적으로 `pole_id × 기준시각`별 score matrix가 계산된다.
+- 그러나 checkpoint part에는 원시 시간별 score가 저장되지 않는다.
+- checkpoint part는 각 Pole의 `mean_score`, `p90_score`, `p95_score`, `p99_score`, `max_score`, `f2_threshold_exceed_rate` 같은 요약값만 저장한다.
+- 따라서 04번의 중간 part 파일만으로 특정 Pole의 특정 날짜·시간 score를 복원할 수 없다.
+- 시간별 시각화가 필요하면 모델 cache와 정적/기상 feature를 이용해 필요한 Pole 또는 필요한 기준시각만 다시 scoring한다.
 
 현재 입력 규모는 다음과 같다.
 
@@ -598,44 +616,63 @@ checkpoint를 무시하고 처음부터 다시 계산할 때:
 
 ---
 
-## 8. Pole 단위 취약성 요약
+## 8. Pole 단위 취약성 요약과 제출 decision
 
 Pole별 시간 score는 다음 지표로 요약한다.
 
 | 지표 | 정의 | 역할 |
 | --- | --- | --- |
-| `p95_score` | Pole별 10월~5월 09~16시 score의 95분위수 | 최종 취약성 주 순위 |
+| `p95_score` | Pole별 10월~5월 09~16시 score의 95분위수 | 최종 연속 위험도 점수와 제출 decision의 기준 |
 | `p90_score` | Pole별 score의 90분위수 | 보조 고위험 조건 |
 | `f2_threshold_exceed_rate` | F2 threshold 이상 row 비율 | 반복 위험군 여부 |
-| `top10_repeat_rate` | 같은 기준시각 내 top 10% 포함 비율 | 반복 우선점검 후보 |
 | `mean_score` | Pole별 평균 score | 평균적 위험 보조 설명 |
 | `max_score` | Pole별 최대 score | 최악 조건 참고 |
 
-최종 주 순위는 `p95_score`로 정한다.
+최종 연속 위험도 점수는 `p95_score`로 정한다.
 
 이유:
 
 - 10월~5월에도 비 오는 날, 습한 날, 상대적으로 저위험인 날이 포함된다.
 - 평균 score는 고위험 조건에서 취약한 Pole의 신호를 희석할 수 있다.
 - 전력설비 취약성 평가는 평상시 평균 위험보다 고위험 조건에서 반복적으로 높아지는 Pole을 찾는 목적에 가깝다.
+- `max_score`는 단 한 번의 극단값에 과민할 수 있으므로 제출용 대표값으로 쓰지 않는다.
 
-등급:
+제출용 `decision`은 다음 식으로 만든다.
 
-| 등급 | 정의 |
+```text
+final_risk_score = p95_score
+decision = 1 if p95_score >= 0.0199793962581399 else 0
+```
+
+이 기준은 전체 Pole 중 위험 Pole 비율을 5%로 고정하지 않는다. 현재 04번 전체 실행 결과 기준으로는 다음과 같다.
+
+| decision | Pole 수 | 비율 |
+| --- | ---: | ---: |
+| 1 | 118,805 | 8.56% |
+| 0 | 1,269,026 | 91.44% |
+
+이 수치는 현재 `single_median_params` 모델과 2020-01-04 09시부터 2021-12-31 16시까지의 10월~5월 09~16시 기상 모집단 기준이다. 모델 모드, 입력 기간, threshold가 바뀌면 decision 개수도 바뀐다.
+
+보고서 및 점검예산용 상대 우선순위는 별도로 둔다.
+
+| 우선순위 그룹 | 정의 | 용도 |
 | --- | --- |
-| 매우 높음 | `p95_score` top 5% |
-| 높음 | top 5~10% |
-| 중간 | top 10~20% |
-| 낮음 | 나머지 |
-| 반복 고위험 | `f2_threshold_exceed_rate` 상위권 |
+| 매우 높음 | `p95_score` top 5% | 고정 점검예산에서 최우선 후보 |
+| 높음 | top 5~10% | 추가 점검 후보 |
+| 중간 | top 10~20% | 확장 점검 후보 |
+| 낮음 | 나머지 | 상대 우선순위 낮음 |
 
-`top 5%`, `top 10%`, `top 20%`는 절대 위험 임계값이 아니라 우선점검 등급이다. STEP 3 top-risk 분석에서 최종 LightGBM의 OOF score 상위 구간이 실제 산불을 강하게 농축했기 때문에, Pole 예측에서도 top-risk 방식으로 우선순위를 정한다.
+`top 5%`, `top 10%`, `top 20%`는 제출용 `decision`이 아니다. 절대 위험 임계값도 아니다. STEP 3 top-risk 분석에서 최종 LightGBM의 OOF score 상위 구간이 실제 산불을 강하게 농축했기 때문에, 제한된 점검 예산에서 상대 우선순위를 설명하기 위한 보조 그룹으로만 사용한다.
+
+`f2_threshold_exceed_rate`는 또 다른 보조지표다. 이는 `score(pole, 기준시각) >= 0.0199793962581399`였던 시간 row의 비율이며, 특정 Pole이 고위험 기상 조건을 얼마나 자주 만나는지 설명한다. 제출용 decision은 이 비율을 직접 thresholding하지 않고, `p95_score`가 F2 threshold 이상인지로 만든다.
 
 산출물:
 
 ```text
 jsw/predict/outputs/pole_vulnerability_summary.csv
 jsw/predict/outputs/pole_vulnerability_groups.csv
+jsw/predict/outputs/pole_final_vulnerability_scores.csv
+jsw/predict/outputs/gangwon_poles_4326__decision.csv
 ```
 
 ---
@@ -693,7 +730,7 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 | checkpoint | expected chunk 수와 completed chunk 수 일치 |
 | resume | 중단 후 재실행 시 기존 checkpoint part 재사용 |
 | Pole 집계 | 모든 Pole에 요약 결과 존재 |
-| 등급 | top 5%, 10%, 20% 개수 검증 |
+| 고정예산 우선순위 그룹 | top 5%, 10%, 20% 개수 검증 |
 | score 분포 | STEP 3 OOF score와 Pole score 분포 비교 |
 | 고위험 후보 | 상위 Pole의 공간 분포와 기상셀 편중 확인 |
 
@@ -708,10 +745,21 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 | `01_audit_pole_inputs.py` | CSV/SHP 입력 감사 |
 | `02_build_pole_static_features.py` | 기상셀·기후지형유형·공간·토지피복 피처 생성 |
 | `03_build_weather_population.py` | 10월~5월 09~16시 기상·캐나다지수 모집단 생성 |
-| `04_score_pole_time_rows.py` | chunk 단위 feature matrix 생성, LightGBM score 산출, checkpoint 저장, Pole별 p95·threshold 초과율·top-risk 등급 생성 |
-| `05_summarize_pole_vulnerability.py` | 선택 사항. 04 결과를 이용한 추가 지도화·보고서용 표·시각화 생성 |
+| `04_score_pole_time_rows.py` | chunk 단위 feature matrix 생성, LightGBM score 산출, checkpoint 저장, Pole별 p95·threshold 초과율·우선순위 요약 생성 |
+| `05_summarize_pole_vulnerability.py` | 04 결과를 제출용 `decision`, 최종 Pole 위험도 점수, 보고서용 우선순위 표로 정리 |
 
 대용량 중간 산출물은 `jsw/predict/outputs/` 아래에 저장한다. 전체 `Pole × 기준시각` score raw table은 기본 저장하지 않고, checkpoint part와 Pole별 요약만 저장한다.
+
+시간별 변화 시각화와 조회용 코드는 `jsw/predict/visualzation/` 아래에 별도로 만든다. 이 폴더의 코드는 04번의 모델 cache, Pole 정적 피처, 시간기상 모집단을 재사용해 필요한 범위만 on-demand scoring한다.
+
+예상 시각화용 기능은 다음과 같다.
+
+| 기능 | 계산 범위 | 저장 정책 |
+| --- | --- | --- |
+| 특정 Pole 시간변화 | 선택한 `pole_id` × 전체 기준시각 | 작으므로 CSV 저장 가능 |
+| 특정 날짜·시간 위험지도 | 전체 Pole × 특정 `기준시각` | parquet 또는 CSV cache |
+| 선택 기간 애니메이션 | 선택 Pole/지역/기간 | 필요한 범위만 cache |
+| 전체 Pole × 전체 시간 원시 score | 53.7억 row | 기본 생성하지 않음 |
 
 ---
 
@@ -728,10 +776,18 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 | `pole_time_score_row_estimate.csv` | 기상셀별 Pole 수, 날씨 row 수, 예상 score row 수 |
 | `pole_vulnerability_summary_parts__single_median_params/` | checkpoint part 파일 |
 | `pole_vulnerability_summary.csv` | Pole별 p95, p90, 초과율, 반복 top-risk |
-| `pole_vulnerability_groups.csv` | top 5%, 10%, 20% 등급 |
+| `pole_vulnerability_groups.csv` | top 5%, 10%, 20% 고정예산 우선순위 요약 |
+| `pole_final_vulnerability_scores.csv` | `final_risk_score=p95_score`, `decision`, 반복 고위험 비율, 고정예산 우선순위 그룹 |
+| `gangwon_poles_4326__decision.csv` | 제출용 `pole_id, lon, lat, decision` 파일 |
+| `pole_vulnerability_top_candidates.csv` | 보고서 및 점검 우선순위용 상위 후보 목록 |
+| `pole_final_risk_group_summary.csv` | 고정예산 우선순위 그룹별 요약 |
+| `pole_final_risk_by_climate_type.csv` | 기후지형유형별 최종 위험도 요약 |
+| `pole_final_risk_by_weather_cell.csv` | 기상셀별 최종 위험도 요약 |
+| `pole_final_vulnerability_audit.csv` | 05번 최종 산출물 검증 |
 | `pole_scoring_audit.csv` | score row 완료 수, checkpoint 완료 수, summary row 수 검증 |
 | `deployment_lgbm__single_median_params.joblib` | 기본 배포용 단일 LightGBM 모델 artifact |
 | `run_manifest__04_score_pole_time_rows.json` | 입력자료, 모델 모드, threshold, checkpoint, 실행시간 |
+| `run_manifest__05_summarize_pole_vulnerability.json` | 제출 decision 정의, threshold, 산출물 경로 |
 
 ---
 
@@ -739,4 +795,105 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 
 최종 보고서에서는 다음처럼 해석한다.
 
-> Pole 산불 취약성 평가는 학습데이터 행을 재사용해 산출한 값이 아니라, Pole 위치자료와 원천 기상·공간·토지피복·캐나다 산불지수 자료에서 학습과 동일한 방식으로 생성한 `Pole × 기준시각` feature matrix에 최종 LightGBM을 적용한 결과이다. 본 분석은 10월~5월 09~16시의 실제 과거 기상 조건을 사용하며, Pole별 최종 취약성은 평균 score가 아니라 고위험 조건을 대표하는 `p95_score`와 반복 고위험 비율로 요약한다. 이 값은 실제 산불 발생확률이 아니라 산불 위험관리 기간의 상대적 점검 우선순위로 해석한다.
+> Pole 산불 취약성 평가는 학습데이터 행을 재사용해 산출한 값이 아니라, Pole 위치자료와 원천 기상·공간·토지피복·캐나다 산불지수 자료에서 학습과 동일한 방식으로 생성한 `Pole × 기준시각` feature matrix에 최종 LightGBM을 적용한 결과이다. 본 분석은 10월~5월 09~16시의 실제 과거 기상 조건을 사용하며, Pole별 최종 연속 위험도는 평균 score가 아니라 고위험 조건을 대표하는 `p95_score`로 정의한다. 제출용 `decision`은 `p95_score`가 STEP 3에서 정한 F2 운영 threshold `0.0199793962581399` 이상이면 1, 아니면 0으로 부여한다. 이 값은 실제 산불 발생확률이 아니라 산불 위험관리 기간의 상대적 취약도 및 운영 decision으로 해석한다. `p95_score` top 5%, 10%, 20% 그룹은 제출 기준이 아니라 제한된 점검예산에서 우선순위를 설명하기 위한 보조 그룹이다.
+
+---
+
+## 13. 2026-06-24 세션 결정사항
+
+이번 세션에서 혼동을 줄이기 위해 다음 기준을 확정했다.
+
+### 13-1. 04번 실행 결과의 성격
+
+- `04_score_pole_time_rows.py`는 전체 `Pole × 기준시각` score를 내부적으로 계산했다.
+- 전체 계산 규모는 `1,387,831`개 Pole과 `356,224`개 기상 row 조합이며, 실제 완료 score row 수는 `5,373,681,632`이다.
+- `pole_vulnerability_summary_parts__single_median_params/`의 checkpoint part는 원시 시간별 score가 아니다.
+- checkpoint part와 `pole_vulnerability_summary.csv`에는 Pole별 요약값만 남아 있다.
+- 따라서 이 중간파일만으로 `1번 Pole의 특정 날짜·시간 score`를 복원할 수 없다.
+
+### 13-2. score와 확률 표현
+
+- LightGBM 코드상 score는 `predict_proba`의 0~1 값이다.
+- 그러나 현재 모델 score는 보정된 실제 산불 발생확률로 표현하지 않는다.
+- 보고서와 제출 설명에서는 `raw risk score`, `산불 취약도 score`, `운영 위험도 score`로 표현한다.
+- `threshold 0.0199793962581399`도 발생확률 1.9979%가 아니라 F2 운영점의 raw score 기준이다.
+
+### 13-3. 최종 Pole 위험도와 제출 decision
+
+최종 Pole 연속 위험도는 다음으로 확정한다.
+
+```text
+final_risk_score = p95_score
+```
+
+제출용 decision은 다음으로 확정한다.
+
+```text
+decision = 1 if p95_score >= 0.0199793962581399 else 0
+```
+
+현재 04번 전체 실행 결과 기준 decision 분포는 다음과 같다.
+
+| 기준 | Pole 수 | 비율 |
+| --- | ---: | ---: |
+| `decision=1` | 118,805 | 8.56% |
+| `decision=0` | 1,269,026 | 91.44% |
+
+`decision`은 top 5%로 고정하지 않는다. threshold를 적용한 결과이므로 위험 Pole 수는 데이터와 모델에 따라 달라진다.
+
+### 13-4. top 5/10/20%의 역할
+
+- `top 5%`, `top 10%`, `top 20%`는 제출용 decision 기준이 아니다.
+- 이는 `p95_score` 기준 상대 순위이며, 제한된 점검예산에서 어느 Pole을 먼저 볼지 설명하는 `fixed_budget_priority_group`이다.
+- 보고서에서는 "위험 Pole은 전체의 5%"라고 쓰지 않는다.
+- 정확한 표현은 "`p95_score` 기준 상위 5%는 최우선 점검 후보"이다.
+
+### 13-5. threshold 초과율의 역할
+
+`f2_threshold_exceed_rate`는 다음 값이다.
+
+```text
+f2_threshold_exceed_rate
+= count(score(pole, 기준시각) >= 0.0199793962581399) / scored_time_rows
+```
+
+이 값은 특정 Pole이 고위험 시간 조건을 얼마나 자주 만나는지 설명하는 보조 지표다. 제출용 decision은 `f2_threshold_exceed_rate`를 직접 기준으로 삼지 않고, `p95_score`가 F2 threshold 이상인지로 만든다.
+
+### 13-6. 05번 스크립트의 역할
+
+`05_summarize_pole_vulnerability.py`는 원시 시간별 score를 새로 저장하는 스크립트가 아니다. 04번이 만든 Pole별 요약 결과를 이용해 다음 산출물을 만든다.
+
+| 산출물 | 역할 |
+| --- | --- |
+| `pole_final_vulnerability_scores.csv` | Pole별 최종 위험도, 제출 decision, 보조 지표, 우선순위 그룹 |
+| `gangwon_poles_4326__decision.csv` | 원본 제출 template과 같은 `pole_id, lon, lat, decision` 파일 |
+| `pole_vulnerability_top_candidates.csv` | 우선점검 후보 목록 |
+| `pole_final_risk_*` 요약표 | 보고서용 그룹·기후지형·기상셀·토지피복 요약 |
+| `run_manifest__05_summarize_pole_vulnerability.json` | decision 정의와 산출물 감사 정보 |
+
+05번 실행 명령은 다음이다.
+
+```powershell
+& 'C:\Program Files\Python313\python.exe' -X utf8 'jsw\predict\05_summarize_pole_vulnerability.py'
+```
+
+### 13-7. 시간별 시각화 코드는 별도 분리
+
+시간별로 변화하는 산불 위험도 시각화는 `jsw/predict/visualzation/` 아래에서 별도 구현한다.
+
+이유:
+
+- 전체 `Pole × 기준시각` 원시 score는 약 53.7억 행이라 CSV 저장이 비현실적이다.
+- 04번 checkpoint에는 원시 시간별 score가 남아 있지 않다.
+- 시각화는 목적에 따라 필요한 범위만 다시 scoring하는 방식이 효율적이다.
+
+구현 방향:
+
+| 목적 | 방식 |
+| --- | --- |
+| 특정 Pole의 시간 변화 | 선택 `pole_id`만 전체 기준시각에 대해 재계산 |
+| 특정 날짜·시간의 전체 지도 | 해당 `기준시각` 1개에 대해 전체 Pole score 재계산 |
+| 특정 기간 애니메이션 | 선택 기간·지역·Pole subset만 재계산 |
+| 자주 쓰는 결과 | parquet 또는 CSV cache로 저장 |
+
+시각화용 코드는 04번에서 만든 `deployment_lgbm__single_median_params.joblib`, `pole_static_features_model_ready.csv`, `weather_population_10to5_09to16.csv`를 재사용한다.

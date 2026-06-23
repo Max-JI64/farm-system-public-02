@@ -363,10 +363,11 @@ def load_daily_canadian_indices() -> pd.DataFrame:
 
 
 def attach_canadian_indices(frame: pd.DataFrame, daily: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
-    data = frame.copy()
+    data = frame.copy().reset_index(drop=True)
     data["기준시각"] = pd.to_datetime(data["기준시각"], errors="raise")
 
     before_noon = data["기준시각"].dt.hour.lt(12)
+    before_noon_mask = before_noon.to_numpy()
     reference_date = data["기준시각"].dt.normalize()
     reference_date = reference_date.where(~before_noon, reference_date - pd.Timedelta(days=1))
     data["캐나다지수_기준날짜"] = reference_date
@@ -384,10 +385,10 @@ def attach_canadian_indices(frame: pd.DataFrame, daily: pd.DataFrame) -> tuple[p
     day_gap = (current_date - data["캐나다지수_기준날짜"]).dt.days
     audit = {
         "rows": int(len(data)),
-        "before_noon_n": int(before_noon.sum()),
-        "at_or_after_noon_n": int((~before_noon).sum()),
-        "before_noon_bad_reference_n": int((~day_gap.loc[before_noon].eq(1)).sum()),
-        "at_or_after_noon_bad_reference_n": int((~day_gap.loc[~before_noon].eq(0)).sum()),
+        "before_noon_n": int(before_noon_mask.sum()),
+        "at_or_after_noon_n": int((~before_noon_mask).sum()),
+        "before_noon_bad_reference_n": int((~day_gap.iloc[before_noon_mask].eq(1)).sum()),
+        "at_or_after_noon_bad_reference_n": int((~day_gap.iloc[~before_noon_mask].eq(0)).sum()),
         "canadian_missing_cells": int(data[CANADIAN_INDEX_COLUMNS].isna().any(axis=1).sum()),
     }
     return data, audit
