@@ -262,6 +262,9 @@ Pole 위치에서 공간·지형·토지피복 피처를 만든다.
 동일성 원칙:
 
 - DEM에서 고도, 경사도, 사면방향, TPI를 계산할 때 학습데이터 생성 코드의 계산 방식과 동일하게 한다.
+- 단, 예측용 Pole 전체 적용에서는 DEM 3×3 window 계산이 실패한 위치가 생길 수 있다. 이 경우 학습데이터의 기본 산출 로직을 우선 적용하되, 실패한 Pole에 한해 가장 가까운 유효 DEM 3×3 window를 찾아 `고도(m)`, `경사도(도)`, `사면방향_sin`, `사면방향_cos`, `TPI(지형위치지수)`를 보완한다.
+- DEM 보완 여부는 숨기지 않고 `DEM_보완방식`, `DEM_보완거리_m`으로 저장한다.
+- DEM 보완은 정적 지형 피처에만 적용하며, 토지피복 미매칭은 임의 보완하지 않고 `미상` 및 binary 0 상태로 유지한다.
 - 거리 변수는 원거리 원본값을 만든 뒤 학습과 동일하게 `log1p` 변환한다.
 - 토지피복 binary 변수는 학습데이터의 정의와 동일하게 만든다.
 - `비산림_WUI_접경후보`도 학습데이터와 같은 규칙으로 만든다.
@@ -291,6 +294,31 @@ jsw/predict/outputs/pole_static_features.csv
 | `log1p_임도_최단거리_m` |
 | `log1p_등산로거리_m` |
 | 토지피복 binary 10개 |
+| `DEM_보완방식` |
+| `DEM_보완거리_m` |
+
+추가 산출물:
+
+```text
+jsw/predict/outputs/pole_static_features_model_ready.csv
+jsw/predict/outputs/pole_static_feature_audit.csv
+jsw/predict/outputs/pole_static_feature_dem_fallback_summary.csv
+```
+
+현재 전체 Pole 실행 기준 정적 피처 검증 결과는 다음과 같다.
+
+| 항목 | 결과 |
+| --- | ---: |
+| 전체 Pole 수 | 1,387,831 |
+| 모델 입력 가능 Pole 수 | 1,387,831 |
+| 정적 피처 결측 Pole 수 | 0 |
+| DEM nearest fallback 적용 Pole 수 | 9,863 |
+| DEM 미해결 Pole 수 | 0 |
+| 기상셀 누락 | 0 |
+| 기후지형유형 누락 | 0 |
+| 토지피복 미매칭 | 67,499 |
+
+토지피복 미매칭은 모델 입력 결측은 아니지만, 해석과 지도화 단계에서는 `토지피복_매칭방식`, `토지피복_L1_NAME`, `토지피복_L2_NAME`을 함께 확인한다.
 
 ### 6-4. Pole용 시간기상 모집단 생성
 
@@ -413,36 +441,160 @@ jsw/predict/outputs/feature_matrix_audit.csv
 
 현재 STEP 2~4의 성능은 5-fold OOF 결과다. 실제 Pole 예측을 위해서는 배포용 모델 artifact가 필요하다.
 
-선택지는 다음과 같다.
+STEP 2의 최종 후보 `TUNE_LGBM_ALL_ALL_LC_NONE`은 하나의 단일 하이퍼파라미터가 아니라 outer fold별로 선택된 5개 하이퍼파라미터 세트를 가진다.
+
+```text
+jsw/Analysis/new_machine_learning/outputs/step2_tuned_single_models/
+selected_params__TUNE_LGBM_ALL_ALL_LC_NONE.json
+```
+
+따라서 배포용 모델 artifact는 다음 두 방식 중 하나로 만든다.
 
 | 방식 | 설명 | 판단 |
 | --- | --- | --- |
-| 전체 development 재학습 LightGBM | 17,045행 전체로 최종 LightGBM 하이퍼파라미터를 사용해 재학습 | 배포가 단순함 |
-| 5-fold model ensemble | STEP 2의 outer fold별 모델 구조를 재학습하고 평균 score 사용 | OOF 구조와 유사하지만 배포가 복잡함 |
+| `single_median_params` | 5개 outer fold 하이퍼파라미터 세트의 중앙값 대표값을 만들고, 전체 development 17,045행으로 LightGBM 1개를 재학습 | 기본값. 계산량이 현실적이고 배포 해석이 단순함 |
+| `five_param_ensemble` | 5개 outer fold 하이퍼파라미터 세트를 각각 전체 development 17,045행으로 재학습하고, 5개 LightGBM score 평균 사용 | OOF 구조에 더 충실하지만 전체 Pole 예측 계산량이 약 5배 증가 |
 
-우선 구현은 전체 development 재학습 모델을 기본으로 한다. 단, score 분포가 STEP 3 OOF score와 크게 달라지는지 반드시 점검한다.
+전체 Pole 예측은 기본적으로 `single_median_params`를 사용한다. 전체 score row 수가 약 53.7억 개이므로 5개 모델 평균은 계산량 측면에서 부담이 크다. 5개 모델 평균을 민감도 분석으로 별도 수행하려면 `--model-mode five_param_ensemble`을 명시한다.
+
+기본 배포 모델 캐시는 다음 규칙으로 저장한다.
+
+```text
+jsw/predict/outputs/deployment_lgbm__single_median_params.joblib
+```
+
+5개 모델 평균을 사용할 때는 다음 이름을 사용한다.
+
+```text
+jsw/predict/outputs/deployment_lgbm__five_param_ensemble.joblib
+```
+
+운영 threshold는 STEP 3에서 선정한 F2 최대점 threshold를 사용한다.
+
+```text
+best_f2 threshold = 0.0199793962581399
+```
+
+단, 이 threshold는 Pole별 최종 등급을 직접 나누는 절대 위험 기준이 아니라 `f2_threshold_exceed_rate` 계산용 보조 기준이다. Pole별 최종 주 순위는 `p95_score`를 사용한다.
 
 ### 7-2. score 산출
 
-각 chunk별로 최종 LightGBM 58개 피처를 모델에 넣어 score를 계산한다.
+각 chunk별로 최종 LightGBM 58개 피처를 모델에 넣어 score를 계산한다. 하지만 전체 `Pole × 기준시각` row를 CSV로 저장하지 않는다.
+
+현재 입력 규모는 다음과 같다.
+
+| 항목 | 값 |
+| --- | ---: |
+| 전체 Pole 수 | 1,387,831 |
+| 날씨 모집단 row 수 | 356,224 |
+| 기상셀 수 | 92 |
+| 예상 score row 수 | 5,373,681,632 |
+
+따라서 구현 원칙은 다음과 같다.
+
+- `pole_static_features_model_ready.csv`와 `weather_population_10to5_09to16.csv`를 `기상셀ID` 기준으로 결합한다.
+- 전체 feature matrix를 한 번에 만들지 않는다.
+- `기상셀ID → Pole chunk → weather chunk` 순서로 나눠 score를 계산한다.
+- 각 Pole chunk에 대해 시간별 score matrix를 만들고, 즉시 Pole별 요약값을 계산한다.
+- 원시 `Pole × 기준시각` score 전체 파일은 기본 생성하지 않는다.
+- 중간 산출은 checkpoint part로 저장하고, 최종 단계에서 part를 병합해 Pole별 요약 파일을 만든다.
 
 산출물:
 
 ```text
-jsw/predict/outputs/pole_time_scores.csv
+jsw/predict/outputs/pole_vulnerability_summary_parts__single_median_params/
+jsw/predict/outputs/pole_vulnerability_summary.csv
+jsw/predict/outputs/pole_vulnerability_groups.csv
+jsw/predict/outputs/pole_scoring_audit.csv
+jsw/predict/outputs/run_manifest__04_score_pole_time_rows.json
 ```
 
-필수 열:
+checkpoint part의 주요 열:
 
 | 열 | 설명 |
 | --- | --- |
 | `pole_id` | Pole ID |
-| `기준시각` | 예측 기준시각 |
 | `기상셀ID` | 매칭된 기상셀 |
-| `score` | 최종 LightGBM 산불 취약도 score |
-| `is_f2_threshold_exceed` | STEP 3 F2 threshold 이상 여부 |
+| `mean_score` | 해당 Pole의 전체 분석 기간 평균 score |
+| `p90_score` | 해당 Pole의 score 90분위수 |
+| `p95_score` | 해당 Pole의 score 95분위수 |
+| `p99_score` | 해당 Pole의 score 99분위수 |
+| `max_score` | 해당 Pole의 최대 score |
+| `f2_threshold_exceed_count` | F2 threshold 이상 시간 row 수 |
+| `f2_threshold_exceed_rate` | F2 threshold 이상 시간 row 비율 |
+| `scored_time_rows` | 해당 Pole에 적용된 시간 row 수 |
 
 `score`는 실제 발생확률로 표현하지 않는다. 현재 모델은 calibration을 최종 보고 기준으로 사용하지 않으므로, score는 상대적 산불 취약도 점수로 해석한다.
+
+### 7-3. checkpoint와 재시작 정책
+
+전체 scoring은 장시간 실행될 수 있으므로 checkpoint/resume을 기본으로 사용한다.
+
+checkpoint 단위:
+
+```text
+기상셀ID + Pole chunk
+```
+
+예시 파일명:
+
+```text
+part__YS_0001__pole_00000000_00001000.csv
+```
+
+재시작 규칙:
+
+- 이미 존재하는 checkpoint part는 재계산하지 않고 재사용한다.
+- 오류나 중단이 발생하면 같은 명령을 다시 실행한다.
+- `--reuse-model-cache`를 붙이면 배포용 LightGBM 모델도 다시 학습하지 않고 재사용한다.
+- 강제로 checkpoint를 무시하고 다시 계산하려면 `--no-resume-checkpoints`를 명시한다.
+
+터미널 로그에는 다음 진행 정보가 출력된다.
+
+```text
+[cell 1/92] YS_0001 | pole=62,321 | weather=3,872 | rows=241,306,912 | elapsed=...
+  [chunk 1/...] 계산 시작 | pole=0:1000 | score_rows=3,872,000
+    weather 20/61 | chunk_rows=... | global_progress~...% | elapsed=...
+  [chunk 1/...] 저장 완료 | completed_rows=.../5,373,681,632 (...%) | elapsed=...
+```
+
+checkpoint 재사용 시에는 다음처럼 출력된다.
+
+```text
+[chunk 1/...] checkpoint 재사용 | completed_rows=... (...%)
+```
+
+### 7-4. 실행 명령
+
+전체 실행 전 규모 확인:
+
+```powershell
+& 'C:\Program Files\Python313\python.exe' 'jsw\predict\04_score_pole_time_rows.py' --estimate-only
+```
+
+전체 기본 실행:
+
+```powershell
+& 'C:\Program Files\Python313\python.exe' 'jsw\predict\04_score_pole_time_rows.py' --confirm-full-run
+```
+
+중단 후 재시작:
+
+```powershell
+& 'C:\Program Files\Python313\python.exe' 'jsw\predict\04_score_pole_time_rows.py' --confirm-full-run --reuse-model-cache
+```
+
+5개 LightGBM 평균 score를 사용할 때:
+
+```powershell
+& 'C:\Program Files\Python313\python.exe' 'jsw\predict\04_score_pole_time_rows.py' --confirm-full-run --model-mode five_param_ensemble
+```
+
+checkpoint를 무시하고 처음부터 다시 계산할 때:
+
+```powershell
+& 'C:\Program Files\Python313\python.exe' 'jsw\predict\04_score_pole_time_rows.py' --confirm-full-run --no-resume-checkpoints
+```
 
 ---
 
@@ -530,12 +682,16 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 | 자료형 | 수치형·범주형 처리 일치 |
 | 결측 | 모델 입력 NaN·inf 없음 또는 처리 규칙 명시 |
 | score | 0~1 범위, NaN·inf 없음 |
+| 모델 artifact | `single_median_params` 또는 `five_param_ensemble` 모드 명시 |
+| threshold | STEP 3 F2 threshold `0.0199793962581399` 사용 여부 확인 |
 
 ### 9-5. 결과 검증
 
 | 검증 항목 | 기준 |
 | --- | --- |
-| row 수 | score row 수와 입력 row 수 일치 |
+| row 수 | 예상 score row 수와 완료 score row 수 일치 |
+| checkpoint | expected chunk 수와 completed chunk 수 일치 |
+| resume | 중단 후 재실행 시 기존 checkpoint part 재사용 |
 | Pole 집계 | 모든 Pole에 요약 결과 존재 |
 | 등급 | top 5%, 10%, 20% 개수 검증 |
 | score 분포 | STEP 3 OOF score와 Pole score 분포 비교 |
@@ -552,10 +708,10 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 | `01_audit_pole_inputs.py` | CSV/SHP 입력 감사 |
 | `02_build_pole_static_features.py` | 기상셀·기후지형유형·공간·토지피복 피처 생성 |
 | `03_build_weather_population.py` | 10월~5월 09~16시 기상·캐나다지수 모집단 생성 |
-| `04_score_pole_time_rows.py` | chunk 단위 feature matrix 생성 및 LightGBM score 산출 |
-| `05_summarize_pole_vulnerability.py` | Pole별 p95, threshold 초과율, top-risk 등급 생성 |
+| `04_score_pole_time_rows.py` | chunk 단위 feature matrix 생성, LightGBM score 산출, checkpoint 저장, Pole별 p95·threshold 초과율·top-risk 등급 생성 |
+| `05_summarize_pole_vulnerability.py` | 선택 사항. 04 결과를 이용한 추가 지도화·보고서용 표·시각화 생성 |
 
-대용량 중간 산출물은 `jsw/predict/outputs/` 아래에 저장한다. 파일 크기가 매우 클 경우 chunk 파일 또는 parquet 사용을 검토한다.
+대용량 중간 산출물은 `jsw/predict/outputs/` 아래에 저장한다. 전체 `Pole × 기준시각` score raw table은 기본 저장하지 않고, checkpoint part와 Pole별 요약만 저장한다.
 
 ---
 
@@ -568,11 +724,14 @@ jsw/predict/outputs/pole_vulnerability_groups.csv
 | `pole_static_features.csv` | Pole별 공간·지형·토지피복 피처 |
 | `weather_population_10to5_09to16.csv` | 기상셀×기준시각 날씨 모집단 |
 | `weather_population_audit.csv` | 날씨 row 수, 결측, 필터 검증 |
-| `feature_matrix_audit.csv` | 최종 58개 피처 생성 가능 여부 |
-| `pole_time_scores.csv` | Pole×기준시각 score |
+| `weather_population_incomplete_rows.csv` | 날씨·캐나다지수 결측으로 제거된 row 목록 |
+| `pole_time_score_row_estimate.csv` | 기상셀별 Pole 수, 날씨 row 수, 예상 score row 수 |
+| `pole_vulnerability_summary_parts__single_median_params/` | checkpoint part 파일 |
 | `pole_vulnerability_summary.csv` | Pole별 p95, p90, 초과율, 반복 top-risk |
 | `pole_vulnerability_groups.csv` | top 5%, 10%, 20% 등급 |
-| `run_manifest__pole_prediction.json` | 입력자료, 코드버전, 모델 artifact, 실행시간 |
+| `pole_scoring_audit.csv` | score row 완료 수, checkpoint 완료 수, summary row 수 검증 |
+| `deployment_lgbm__single_median_params.joblib` | 기본 배포용 단일 LightGBM 모델 artifact |
+| `run_manifest__04_score_pole_time_rows.json` | 입력자료, 모델 모드, threshold, checkpoint, 실행시간 |
 
 ---
 

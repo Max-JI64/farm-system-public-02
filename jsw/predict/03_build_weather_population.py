@@ -59,6 +59,23 @@ def main() -> None:
 
     incomplete_mask = weather[required_for_model].replace([float("inf"), float("-inf")], pd.NA).isna().any(axis=1)
     incomplete_rows = int(incomplete_mask.sum())
+    incomplete_detail = weather.loc[
+        incomplete_mask,
+        ["기상셀ID", "기준시각", "캐나다지수_기준날짜", "캐나다지수_정책"],
+    ].copy()
+    if incomplete_rows:
+        missing_flags = (
+            weather.loc[incomplete_mask, required_for_model]
+            .replace([float("inf"), float("-inf")], pd.NA)
+            .isna()
+        )
+        incomplete_detail["missing_features"] = [
+            "|".join(missing_flags.columns[row_missing].tolist())
+            for row_missing in missing_flags.to_numpy()
+        ]
+    else:
+        incomplete_detail["missing_features"] = []
+
     if not args.keep_incomplete and incomplete_rows:
         weather = weather.loc[~incomplete_mask].copy()
 
@@ -73,8 +90,14 @@ def main() -> None:
             ("rows_after_feature_engineering", f"{total_after_feature:,}", total_after_feature > 0),
             ("rows_after_10to5_09to16_filter", f"{filtered_rows:,}", filtered_rows > 0),
             ("rows_written", f"{len(weather):,}", len(weather) > 0),
+            ("incomplete_rows_before_drop", incomplete_rows, True),
             ("dropped_incomplete_rows", incomplete_rows if not args.keep_incomplete else 0, True),
-            ("kept_incomplete_rows", incomplete_rows if args.keep_incomplete else 0, incomplete_rows == 0 or args.keep_incomplete),
+            ("kept_incomplete_rows", incomplete_rows if args.keep_incomplete else 0, (not args.keep_incomplete) or incomplete_rows == 0),
+            (
+                "model_weather_nan_cells_after_write",
+                int(weather[required_for_model].replace([float("inf"), float("-inf")], pd.NA).isna().sum().sum()),
+                int(weather[required_for_model].replace([float("inf"), float("-inf")], pd.NA).isna().sum().sum()) == 0,
+            ),
             ("weather_cell_count", int(weather["기상셀ID"].nunique()), weather["기상셀ID"].nunique() > 0),
             ("duplicated_cell_datetime", duplicated, duplicated == 0),
             ("outside_month_filter", int((~pd.to_datetime(weather["기준시각"]).dt.month.isin([10, 11, 12, 1, 2, 3, 4, 5])).sum()), True),
@@ -87,8 +110,10 @@ def main() -> None:
 
     out_path = output_dir / "weather_population_10to5_09to16.csv"
     audit_path = output_dir / "weather_population_audit.csv"
+    incomplete_path = output_dir / "weather_population_incomplete_rows.csv"
     write_csv(weather, out_path)
     write_csv(audit, audit_path)
+    write_csv(incomplete_detail, incomplete_path)
     write_json(
         {
             "script": "03_build_weather_population.py",
@@ -97,6 +122,8 @@ def main() -> None:
             "months": [10, 11, 12, 1, 2, 3, 4, 5],
             "hours": list(range(9, 17)),
             "rows_written": int(len(weather)),
+            "incomplete_rows_before_drop": incomplete_rows,
+            "incomplete_rows_file": str(incomplete_path),
             "canadian_policy": "09~11시 D-1 정오, 12~16시 당일 정오",
             "keep_incomplete": bool(args.keep_incomplete),
         },
