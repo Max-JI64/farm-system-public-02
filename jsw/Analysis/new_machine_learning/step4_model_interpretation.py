@@ -20,21 +20,21 @@ import pandas as pd
 import seaborn as sns
 import shap
 from scipy.stats import spearmanr
+from sklearn.metrics import average_precision_score
 
 import step2_tuned_single_models as step2
 
 
 RANDOM_STATE = 20260622
-FINAL_THRESHOLD = 0.0257384684081698
+FINAL_THRESHOLD = float("nan")
 FINAL_CANDIDATE_ID = "TUNE_LGBM_ALL_ALL_LC_NONE"
-FINAL_ABLATION_ID = "CANADA_DROP_ISI"
 TOP_FRACTIONS = (0.05, 0.10, 0.20, 0.30)
 ERROR_GROUPS = ("TP", "FN", "FP", "TN")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="new_machine_learning Step6: final LightGBM OOF SHAP interpretation",
+        description="new_machine_learning Step4: tuned LightGBM interpretation at F2 threshold",
     )
     parser.add_argument("--data", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--plots-only",
         action="store_true",
-        help="기존 Step 6 CSV를 읽어 플롯만 다시 생성",
+        help="기존 Step 4 CSV를 읽어 플롯만 다시 생성",
     )
     return parser.parse_args()
 
@@ -100,10 +100,9 @@ def setup_plot_style() -> None:
 
 
 def final_features() -> list[str]:
-    features = list(
+    return list(
         step2.build_feature_sets()["WS_ALL__CANADA_ALL__LC_USED"].features
     )
-    return [feature for feature in features if feature != "ISI"]
 
 
 def load_params(path: Path) -> dict[str, dict[str, Any]]:
@@ -329,12 +328,12 @@ def add_analysis_columns(data: pd.DataFrame, oof: pd.DataFrame) -> pd.DataFrame:
     )
     if frame["risk_score"].isna().any():
         raise RuntimeError("OOF score가 원자료와 매칭되지 않았습니다.")
-    frame["pred_recall70"] = (frame["risk_score"] >= FINAL_THRESHOLD).astype(int)
+    frame["pred_f2"] = (frame["risk_score"] >= FINAL_THRESHOLD).astype(int)
     frame["error_group"] = np.select(
         [
-            (frame[step2.TARGET_COL] == 1) & (frame["pred_recall70"] == 1),
-            (frame[step2.TARGET_COL] == 1) & (frame["pred_recall70"] == 0),
-            (frame[step2.TARGET_COL] == 0) & (frame["pred_recall70"] == 1),
+            (frame[step2.TARGET_COL] == 1) & (frame["pred_f2"] == 1),
+            (frame[step2.TARGET_COL] == 1) & (frame["pred_f2"] == 0),
+            (frame[step2.TARGET_COL] == 0) & (frame["pred_f2"] == 1),
         ],
         ["TP", "FN", "FP"],
         default="TN",
@@ -451,7 +450,7 @@ def threshold_subgroup_metrics(analysis_data: pd.DataFrame) -> pd.DataFrame:
             analysis_data[step2.SAMPLE_TYPE_COL].isin(["Target_1", negative_type])
         ]
         y = subset[step2.TARGET_COL].to_numpy(dtype=int)
-        pred = subset["pred_recall70"].to_numpy(dtype=int)
+        pred = subset["pred_f2"].to_numpy(dtype=int)
         tp = int(((y == 1) & (pred == 1)).sum())
         fp = int(((y == 0) & (pred == 1)).sum())
         fn = int(((y == 1) & (pred == 0)).sum())
@@ -477,7 +476,7 @@ def threshold_subgroup_metrics(analysis_data: pd.DataFrame) -> pd.DataFrame:
 
     for climate_type, subset in analysis_data.groupby(step2.CLIMATE_COL):
         y = subset[step2.TARGET_COL].to_numpy(dtype=int)
-        pred = subset["pred_recall70"].to_numpy(dtype=int)
+        pred = subset["pred_f2"].to_numpy(dtype=int)
         tp = int(((y == 1) & (pred == 1)).sum())
         fp = int(((y == 0) & (pred == 1)).sum())
         fn = int(((y == 1) & (pred == 0)).sum())
@@ -697,7 +696,7 @@ def save_shap_values(
             step2.CLIMATE_COL,
             step2.GROUP_COL,
             "risk_score",
-            "pred_recall70",
+            "pred_f2",
             "error_group",
             "risk_rank",
             "top_fraction",
@@ -774,7 +773,7 @@ def save_plots(
     ].copy()
     fig, ax = plt.subplots(figsize=(8, 5))
     sns.barplot(data=control, x="group", y="fp_rate", color="#dd8452", ax=ax)
-    ax.set_title("recall 70% 운영점의 대조군별 FP 비율")
+    ax.set_title("F2 threshold 운영점의 대조군별 FP 비율")
     ax.set_xlabel("대조군 유형")
     ax.set_ylabel("FP rate")
     fig.tight_layout()
@@ -816,7 +815,7 @@ def regenerate_plots_from_outputs(output_dir: Path) -> None:
         "global_importance": output_dir / "shap_importance_global.csv",
         "climate_importance": output_dir / "shap_importance_by_climate.csv",
         "error_importance": output_dir / "shap_importance_by_error_group.csv",
-        "control_summary": output_dir / "recall70_false_positive_controls.csv",
+        "control_summary": output_dir / "f2_false_positive_controls.csv",
         "fire_comparison": output_dir / "top_risk_fire_vs_other_fire_distribution.csv",
     }
     for path in required.values():
@@ -837,7 +836,411 @@ def regenerate_plots_from_outputs(output_dir: Path) -> None:
     log(f"한글 폰트 적용 플롯 재생성 완료: {output_dir / 'plots'}")
 
 
+def load_final_context(
+    analysis_dir: Path,
+) -> tuple[dict[str, Any], dict[str, Any], pd.DataFrame, Path, Path]:
+    step3_dir = analysis_dir / "outputs" / "step3_f2_threshold"
+    step4_dir = analysis_dir / "outputs" / "step4_model_interpretation"
+    threshold_path = step3_dir / "final_thresholds.json"
+    final_oof_path = step3_dir / "final_oof__lightgbm_raw_score.csv"
+    for path in (threshold_path, final_oof_path):
+        if not path.exists():
+            raise FileNotFoundError(path)
+    thresholds = json.loads(threshold_path.read_text(encoding="utf-8"))
+    if thresholds.get("candidate_id") != FINAL_CANDIDATE_ID:
+        raise ValueError("STEP 3 최종 모델이 tuned LightGBM 원형이 아닙니다.")
+    if thresholds.get("calibration_applied") is not False:
+        raise ValueError("STEP 4는 calibration이 없는 raw score만 해석합니다.")
+    final_oof = pd.read_csv(final_oof_path, encoding="utf-8-sig", low_memory=False)
+    selection = {
+        "candidate_kind": "single",
+        "streams": ["lgbm_baseline"],
+    }
+    return selection, thresholds, final_oof, step3_dir, step4_dir
+
+
+def normalized_score_oof(final_oof: pd.DataFrame) -> pd.DataFrame:
+    required = {
+        "sample_id",
+        "outer_fold",
+        "y_true",
+        "sample_type",
+        "climate_type",
+        "group_id",
+        "risk_score",
+    }
+    missing = sorted(required - set(final_oof.columns))
+    if missing:
+        raise KeyError(f"STEP 4 최종 OOF 필수 열 누락: {missing}")
+    result = final_oof[
+        [
+            "sample_id",
+            "outer_fold",
+            "y_true",
+            "sample_type",
+            "climate_type",
+            "group_id",
+            "risk_score",
+        ]
+    ].copy()
+    return result.rename(columns={"risk_score": "y_prob"})
+
+
+def base_model_performance(
+    matrix: pd.DataFrame,
+    streams: list[str],
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    hard_mask = matrix["sample_type"].isin(["Target_1", "Target_0A"])
+    for stream in streams:
+        rows.append(
+            {
+                "stream": stream,
+                "auprc": step2.safe_average_precision(
+                    matrix["y_true"],
+                    matrix[stream],
+                ),
+                "target0a_auprc": step2.safe_average_precision(
+                    matrix.loc[hard_mask, "y_true"],
+                    matrix.loc[hard_mask, stream],
+                ),
+                "score_mean": float(matrix[stream].mean()),
+                "score_std": float(matrix[stream].std()),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("auprc", ascending=False)
+
+
+def build_fold_scorer(
+    selection: dict[str, Any],
+    *,
+    outer_fold: int,
+    inner_oof: pd.DataFrame,
+    selected_weights: pd.DataFrame,
+):
+    candidate_kind = str(selection["candidate_kind"])
+    method = str(selection["method"])
+    streams = tuple(str(value) for value in selection["streams"])
+    ensemble_id = str(selection["selected_ensemble_id"])
+
+    if candidate_kind in {"single", "fixed"}:
+        return lambda frame: step3.combine_scores(frame, streams, method)
+
+    if candidate_kind == "weighted":
+        row = selected_weights.loc[
+            (selected_weights["ensemble_id"] == ensemble_id)
+            & (selected_weights["outer_fold"] == outer_fold)
+        ]
+        if len(row) != 1:
+            raise RuntimeError(
+                f"{ensemble_id} outer_fold={outer_fold} weight 행이 유일하지 않습니다."
+            )
+        weights = np.asarray(
+            [float(row.iloc[0][f"weight__{stream}"]) for stream in streams]
+        )
+        return lambda frame: step3.combine_scores(
+            frame,
+            streams,
+            method,
+            weights=weights,
+        )
+
+    if candidate_kind == "stacking":
+        transform = str(selection.get("transform", "logit"))
+        train = inner_oof.loc[inner_oof["outer_fold"] == outer_fold]
+        x_train = step3.transformed_matrix(train, streams, transform)
+        y_train = train["y_true"].to_numpy(dtype=int)
+        model = step3.build_stacking_model()
+        model.fit(x_train, y_train)
+        return lambda frame: step3.clipped_probability(
+            model.predict_proba(
+                step3.transformed_matrix(frame, streams, transform)
+            )[:, 1]
+        )
+
+    raise ValueError(f"지원하지 않는 최종 후보 유형: {candidate_kind}")
+
+
+def permutation_importance_by_outer_fold(
+    matrix: pd.DataFrame,
+    selection: dict[str, Any],
+    step3_dir: Path,
+    *,
+    repeats: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    inner_path = step3_dir / "inner_base_oof.csv"
+    weight_path = step3_dir / "selected_weights_by_outer_fold.csv"
+    inner_oof = (
+        pd.read_csv(inner_path, encoding="utf-8-sig", low_memory=False)
+        if inner_path.exists()
+        else pd.DataFrame()
+    )
+    selected_weights = (
+        pd.read_csv(weight_path, encoding="utf-8-sig", low_memory=False)
+        if weight_path.exists()
+        else pd.DataFrame()
+    )
+    streams = [str(value) for value in selection["streams"]]
+    rng = np.random.default_rng(RANDOM_STATE)
+    importance_rows: list[dict[str, Any]] = []
+    reproduction_rows: list[dict[str, Any]] = []
+    selected_oof_path = (
+        step3_dir / f"oof__{selection['selected_ensemble_id']}.csv"
+    )
+    selected_oof = pd.read_csv(
+        selected_oof_path,
+        encoding="utf-8-sig",
+        low_memory=False,
+    ).set_index("sample_id")["y_score"]
+
+    for outer_fold, valid in matrix.groupby("outer_fold", sort=True):
+        valid = valid.copy().reset_index(drop=True)
+        scorer = build_fold_scorer(
+            selection,
+            outer_fold=int(outer_fold),
+            inner_oof=inner_oof,
+            selected_weights=selected_weights,
+        )
+        baseline_score = scorer(valid)
+        stored_score = valid["sample_id"].map(selected_oof).to_numpy(dtype=float)
+        baseline_auprc = average_precision_score(valid["y_true"], baseline_score)
+        reproduction_rows.append(
+            {
+                "outer_fold": int(outer_fold),
+                "n": int(len(valid)),
+                "baseline_auprc": float(baseline_auprc),
+                "score_max_abs_difference": float(
+                    np.max(np.abs(baseline_score - stored_score))
+                ),
+            }
+        )
+        for stream in streams:
+            deltas: list[float] = []
+            for repeat in range(repeats):
+                permuted = valid.copy()
+                permuted[stream] = rng.permutation(
+                    permuted[stream].to_numpy(dtype=float)
+                )
+                permuted_auprc = average_precision_score(
+                    permuted["y_true"],
+                    scorer(permuted),
+                )
+                deltas.append(float(baseline_auprc - permuted_auprc))
+            importance_rows.append(
+                {
+                    "outer_fold": int(outer_fold),
+                    "stream": stream,
+                    "repeats": int(repeats),
+                    "auprc_drop_mean": float(np.mean(deltas)),
+                    "auprc_drop_std": float(np.std(deltas, ddof=1)),
+                    "auprc_drop_min": float(np.min(deltas)),
+                    "auprc_drop_max": float(np.max(deltas)),
+                }
+            )
+
+    by_fold = pd.DataFrame(importance_rows)
+    aggregate = (
+        by_fold.groupby("stream", as_index=False)
+        .agg(
+            auprc_drop_mean=("auprc_drop_mean", "mean"),
+            auprc_drop_std_across_folds=("auprc_drop_mean", "std"),
+            fold_positive_count=("auprc_drop_mean", lambda value: int((value > 0).sum())),
+        )
+        .sort_values("auprc_drop_mean", ascending=False)
+    )
+    aggregate["rank"] = np.arange(1, len(aggregate) + 1)
+    aggregate = aggregate.merge(
+        by_fold.groupby("stream", as_index=False).agg(
+            repeat_std_mean=("auprc_drop_std", "mean")
+        ),
+        on="stream",
+        how="left",
+    )
+    return aggregate, pd.DataFrame(reproduction_rows)
+
+
+def save_ensemble_plots(
+    output_dir: Path,
+    base_performance: pd.DataFrame,
+    permutation: pd.DataFrame,
+) -> None:
+    plot_dir = output_dir / "plots"
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(9, 5))
+    sns.barplot(data=base_performance, x="auprc", y="stream", ax=ax, color="#4c78a8")
+    ax.set_title("Base model OOF AUPRC")
+    fig.tight_layout()
+    fig.savefig(plot_dir / "base_model_auprc.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    sns.barplot(
+        data=permutation,
+        x="auprc_drop_mean",
+        y="stream",
+        ax=ax,
+        color="#e45756",
+    )
+    ax.set_title("Outer-validation base-score permutation importance")
+    ax.set_xlabel("AUPRC decrease after permutation")
+    fig.tight_layout()
+    fig.savefig(
+        plot_dir / "ensemble_permutation_importance.png",
+        dpi=180,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
+def run_ensemble_interpretation(
+    *,
+    data: pd.DataFrame,
+    score_oof: pd.DataFrame,
+    selection: dict[str, Any],
+    step3_dir: Path,
+    output_dir: Path,
+    permutation_repeats: int,
+) -> dict[str, Any]:
+    matrix = pd.read_csv(
+        step3_dir / "ensemble_input_oof_matrix.csv",
+        encoding="utf-8-sig",
+        low_memory=False,
+    )
+    streams = [str(value) for value in selection["streams"]]
+    analysis_data = add_analysis_columns(data, score_oof)
+    analysis_data["risk_band"] = top_risk_bands(analysis_data)
+    base_performance = base_model_performance(matrix, streams)
+    permutation, reproduction = permutation_importance_by_outer_fold(
+        matrix,
+        selection,
+        step3_dir,
+        repeats=permutation_repeats,
+    )
+    threshold_subgroups = threshold_subgroup_metrics(analysis_data)
+    control_summary = control_fp_summary(analysis_data)
+    features = final_features()
+    error_distributions = numeric_distribution_by_group(
+        analysis_data,
+        features,
+        "error_group",
+    )
+    fire_comparison = fire_distribution_comparison(analysis_data, features)
+    fn_cases = analysis_data.loc[analysis_data["error_group"] == "FN"].copy()
+    fp_cases = analysis_data.loc[analysis_data["error_group"] == "FP"].copy()
+    target0a_fp = fp_cases.loc[
+        fp_cases[step2.SAMPLE_TYPE_COL] == "Target_0A"
+    ].copy()
+
+    base_performance.to_csv(
+        output_dir / "base_model_performance.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    permutation.to_csv(
+        output_dir / "outer_validation_permutation_importance.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    reproduction.to_csv(
+        output_dir / "ensemble_score_reproduction.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    threshold_subgroups.to_csv(
+        output_dir / "f2_subgroup_metrics.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    control_summary.to_csv(
+        output_dir / "f2_false_positive_controls.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    fn_cases.to_csv(
+        output_dir / "fn_cases.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    fp_cases.to_csv(
+        output_dir / "all_fp_cases.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    target0a_fp.to_csv(
+        output_dir / "target0a_fp_cases.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    error_distributions.to_csv(
+        output_dir / "feature_distribution_by_error_group.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    fire_comparison.to_csv(
+        output_dir / "top_risk_fire_vs_other_fire_distribution.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    analysis_data.to_csv(
+        output_dir / "prediction_groups.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    details_path = None
+    if selection["candidate_kind"] == "stacking":
+        details_path = step3_dir / "stacking_coefficients.csv"
+    elif selection["candidate_kind"] == "weighted":
+        details_path = step3_dir / "selected_weights_by_outer_fold.csv"
+    if details_path is not None and details_path.exists():
+        details = pd.read_csv(details_path, encoding="utf-8-sig")
+        details.loc[
+            details["ensemble_id"] == selection["selected_ensemble_id"]
+        ].to_csv(
+            output_dir / "selected_ensemble_parameters.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
+
+    confusion_counts = (
+        analysis_data["error_group"].value_counts().reindex(ERROR_GROUPS, fill_value=0)
+    )
+    validations = pd.DataFrame(
+        [
+            {
+                "check": "prediction_group_total",
+                "value": int(confusion_counts.sum()),
+                "expected": int(len(analysis_data)),
+                "passed": int(confusion_counts.sum()) == int(len(analysis_data)),
+            },
+            {
+                "check": "ensemble_reproduction_max_abs_difference",
+                "value": float(reproduction["score_max_abs_difference"].max()),
+                "expected": 1e-10,
+                "passed": float(reproduction["score_max_abs_difference"].max()) <= 1e-10,
+            },
+        ]
+    )
+    validations.to_csv(
+        output_dir / "validation_checks__step5.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    save_ensemble_plots(output_dir, base_performance, permutation)
+    return {
+        "interpretation_mode": "ensemble",
+        "streams": streams,
+        "tp": int(confusion_counts["TP"]),
+        "fp": int(confusion_counts["FP"]),
+        "fn": int(confusion_counts["FN"]),
+        "tn": int(confusion_counts["TN"]),
+        "permutation_repeats": int(permutation_repeats),
+        "validation_passed": bool(validations["passed"].all()),
+    }
+
+
 def main() -> None:
+    global FINAL_THRESHOLD
     args = parse_args()
     setup_plot_style()
     root = step2.find_project_root()
@@ -846,20 +1249,32 @@ def main() -> None:
         root / "data" / "학습데이터" / "최종_머신러닝_학습데이터.csv"
     )
     output_dir = args.output_dir or (
-        analysis_dir / "outputs" / "step6_model_interpretation"
+        analysis_dir / "outputs" / "step4_model_interpretation"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     if args.plots_only:
         regenerate_plots_from_outputs(output_dir)
         return
 
+    selection, thresholds, final_oof, step3_dir, step4_dir = load_final_context(
+        analysis_dir
+    )
+    FINAL_THRESHOLD = float(
+        thresholds["operating_points"]["best_f2"]["threshold"]
+    )
+    score_oof = normalized_score_oof(final_oof)
+    data = pd.read_csv(data_path, encoding="utf-8-sig", low_memory=False)
+
+    started = time.perf_counter()
+    if not (
+        selection["candidate_kind"] == "single"
+        and selection["streams"] == ["lgbm_baseline"]
+    ):
+        raise RuntimeError("STEP 4는 tuned LightGBM 단일 모델만 해석합니다.")
+
     step1_dir = analysis_dir / "outputs" / "step1_single_models"
     step2_dir = analysis_dir / "outputs" / "step2_tuned_single_models"
-    step3_dir = analysis_dir / "outputs" / "step3_feature_ablation"
-    oof_path = (
-        step3_dir
-        / "oof__TUNE_LGBM_ALL_ALL_LC_NONE__CANADA_DROP_ISI.csv"
-    )
+    oof_path = step2_dir / "oof__TUNE_LGBM_ALL_ALL_LC_NONE.csv"
     params_path = (
         step2_dir / "selected_params__TUNE_LGBM_ALL_ALL_LC_NONE.json"
     )
@@ -868,8 +1283,6 @@ def main() -> None:
         if not path.exists():
             raise FileNotFoundError(path)
 
-    started = time.perf_counter()
-    data = pd.read_csv(data_path, encoding="utf-8-sig", low_memory=False)
     oof = pd.read_csv(oof_path, encoding="utf-8-sig", low_memory=False)
     features = final_features()
     params_by_fold = load_params(params_path)
@@ -884,7 +1297,7 @@ def main() -> None:
         n_jobs=args.n_jobs,
         batch_size=args.shap_batch_size,
     )
-    analysis_data = add_analysis_columns(data, oof)
+    analysis_data = add_analysis_columns(data, score_oof)
     analysis_data["risk_band"] = top_risk_bands(analysis_data)
 
     global_importance = importance_table(shap_matrix, features)
@@ -978,12 +1391,12 @@ def main() -> None:
         encoding="utf-8-sig",
     )
     threshold_subgroups.to_csv(
-        output_dir / "recall70_subgroup_metrics.csv",
+        output_dir / "f2_subgroup_metrics.csv",
         index=False,
         encoding="utf-8-sig",
     )
     control_summary.to_csv(
-        output_dir / "recall70_false_positive_controls.csv",
+        output_dir / "f2_false_positive_controls.csv",
         index=False,
         encoding="utf-8-sig",
     )
@@ -1023,7 +1436,7 @@ def main() -> None:
         encoding="utf-8-sig",
     )
     validation.to_csv(
-        output_dir / "validation_checks__step6.csv",
+        output_dir / "validation_checks__step4.csv",
         index=False,
         encoding="utf-8-sig",
     )
@@ -1036,7 +1449,7 @@ def main() -> None:
             step2.CLIMATE_COL,
             step2.GROUP_COL,
             "risk_score",
-            "pred_recall70",
+            "pred_f2",
             "error_group",
             "risk_rank",
             "top_fraction",
@@ -1071,13 +1484,17 @@ def main() -> None:
         "positive_n": int(data[step2.TARGET_COL].sum()),
         "feature_n": len(features),
         "outer_fold_n": len(splits),
+        "candidate_id": FINAL_CANDIDATE_ID,
+        "score_type": "raw_oof_model_score",
+        "calibration_applied": False,
         "final_threshold": FINAL_THRESHOLD,
+        "primary_operating_point": "best_f2",
         "shap_output": "LightGBM raw margin contribution",
         "interpretation": "predictive contribution, not causal effect",
     }
-    write_json(output_dir / "run_manifest__step6.json", manifest)
+    write_json(output_dir / "run_manifest__step4.json", manifest)
     log(
-        f"Step 6 완료 | output={output_dir} | "
+        f"Step 4 완료 | mode=single_lightgbm | output={output_dir} | "
         f"elapsed={step2.format_seconds(manifest['elapsed_seconds'])}"
     )
 
